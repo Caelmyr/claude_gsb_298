@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>求解器与参数 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>求解器选择与参数</h1>
+      <span class="sub">线性 / 整数规划与元启发式算法</span>
+    </div>
+
+    <div class="grid cols-3" id="solver-cards"></div>
+
+    <div class="card">
+      <div class="flex">
+        <h2 style="margin:0" id="param-title">参数</h2>
+        <div class="spacer"></div>
+        <button class="btn primary" id="run-btn" onclick="run()">▶ 求解</button>
+      </div>
+      <div class="form-grid" id="param-fields"></div>
+    </div>
+
+    <div class="card" id="result-card" style="display:none">
+      <h2>求解结果</h2>
+      <div id="result-body"></div>
+    </div>
+
+    <div class="card">
+      <h2>已保存的配置</h2>
+      <table><thead><tr><th>ID</th><th>求解器</th><th>参数</th><th></th></tr></thead>
+        <tbody id="config-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+let problem = null;
+let defaults = {};
+let selected = 'genetic';
+
+initSidebar('solvers.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  const meta = await api('/solvers');
+  defaults = meta.defaults;
+  renderCards();
+  renderParams();
+  loadConfigs();
+}
+
+function renderCards() {
+  document.getElementById('solver-cards').innerHTML = SOLVER_NAMES.map(n => `
+    <div class="card" style="cursor:pointer;margin:0;border-width:2px;${n === selected ? 'border-color:var(--accent)' : ''}"
+         onclick="select('${n}')">
+      <h2 style="margin:0 0 4px">${escapeHtml(SOLVER_LABELS[n])}</h2>
+      <div class="badge info">${n}</div>
+      <p class="small muted" style="margin:8px 0 0">${description(n)}</p>
+    </div>`).join('');
+}
+
+function description(n) {
+  return {
+    lp: '时间索引模型的线性规划松弛 —— 给出下界并还原出一个可行排程。',
+    ip: '基于时间索引模型的精确分支定界求解。',
+    genetic: '随机键编码的遗传算法，配合串行 SGS 解码。',
+    simulated_annealing: '随机键编码的模拟退火，采用 Metropolis 接受准则。',
+    greedy: '基于优先规则的确定性串行 SGS 基线。',
+  }[n] || '';
+}
+
+function select(n) { selected = n; renderCards(); renderParams(); }
+
+function renderParams() {
+  document.getElementById('param-title').textContent = `参数 — ${SOLVER_LABELS[selected]}`;
+  const params = defaults[selected] || {};
+  const fields = document.getElementById('param-fields');
+  fields.innerHTML = '';
+  for (const [k, v] of Object.entries(params)) {
+    const div = document.createElement('div');
+    if (typeof v === 'boolean') {
+      div.innerHTML = `<label>${escapeHtml(k)}</label>
+        <input type="checkbox" id="param-${k}" ${v ? 'checked' : ''} style="width:auto">`;
+    } else if (typeof v === 'number') {
+      div.innerHTML = `<label>${escapeHtml(k)}</label>
+        <input type="number" id="param-${k}" step="any" value="${v}">`;
+    } else {
+      div.innerHTML = `<label>${escapeHtml(k)}</label><input id="param-${k}" value="${escapeHtml(v)}">`;
+    }
+    fields.appendChild(div);
+  }
+}
+
+function collectParams() {
+  const params = {};
+  for (const [k, v] of Object.entries(defaults[selected] || {})) {
+    const el = document.getElementById('param-' + k);
+    if (typeof v === 'boolean') params[k] = el.checked;
+    else if (typeof v === 'number') params[k] = Number(el.value);
+    else params[k] = el.value;
+  }
+  return params;
+}
+
+async function run() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = '求解中…';
+  try {
+    const sol = await api(`/problems/${problem.id}/solve`, {
+      method: 'POST', body: JSON.stringify({ solver: selected, params: collectParams() }),
+    });
+    showResult(sol);
+    toast(`求解完成：目标值 ${fmt(sol.objective_value)}`);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ 求解';
+  }
+}
+
+function showResult(sol) {
+  document.getElementById('result-card').style.display = 'block';
+  document.getElementById('result-body').innerHTML = `
+    <div class="grid cols-4">
+      <div class="stat"><div class="label">目标值</div><div class="value">${fmt(sol.objective_value)}</div></div>
+      <div class="stat"><div class="label">完工时间</div><div class="value">${fmt(sol.makespan)}</div></div>
+      <div class="stat"><div class="label">状态</div><div class="value">${statusBadge(sol.status)}</div></div>
+      <div class="stat"><div class="label">耗时</div><div class="value">${fmt(sol.solve_time)}s</div></div>
+    </div>
+    <p class="small muted">${escapeHtml(sol.message || '')} · 方案 <span class="mono">${escapeHtml(sol.id)}</span></p>
+    <div class="btn-row">
+      <button class="btn" onclick="saveConfig()">保存配置</button>
+      <a class="btn" href="gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(sol.id)}">查看甘特图</a>
+    </div>`;
+}
+
+async function saveConfig() {
+  await api(`/problems/${problem.id}/configs`, {
+    method: 'POST', body: JSON.stringify({ solver: selected, params: collectParams() }),
+  });
+  toast('配置已保存');
+  loadConfigs();
+}
+
+async function loadConfigs() {
+  const { configs } = await api(`/problems/${problem.id}/configs`).catch(() => ({ configs: [] }));
+  document.getElementById('config-rows').innerHTML = configs.map(c => `
+    <tr><td class="mono">${escapeHtml(c.id)}</td><td>${escapeHtml(solverLabel(c.solver))}</td>
+      <td class="small mono">${escapeHtml(JSON.stringify(c.params))}</td>
+      <td><button class="btn sm" onclick='applyConfig(${JSON.stringify(c.params).replace(/'/g, "&#39;")})'>应用</button></td></tr>`).join('')
+    || '<tr><td colspan="4" class="empty">暂无已保存的配置。</td></tr>';
+}
+
+function applyConfig(params) {
+  for (const [k, v] of Object.entries(params)) {
+    const el = document.getElementById('param-' + k);
+    if (!el) continue;
+    if (typeof v === 'boolean') el.checked = v;
+    else el.value = v;
+  }
+  toast('配置已应用');
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

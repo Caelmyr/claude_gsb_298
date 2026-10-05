@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>任务与依赖 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>任务定义与依赖</h1>
+      <span class="sub">工期、资源需求、先后顺序与时间窗口</span>
+    </div>
+
+    <div class="card">
+      <h2>实例设置</h2>
+      <div class="form-grid">
+        <div><label>名称</label><input id="p-name"></div>
+        <div><label>描述</label><input id="p-desc"></div>
+        <div><label>计划周期</label><input id="p-horizon" type="number"></div>
+        <div><label>时间单位</label><input id="p-unit"></div>
+        <div><label>目标类型</label><select id="p-obj"></select></div>
+        <div><label>目标权重（自定义："makespan:1.0,tardiness:2.0"）</label>
+          <input id="p-weights" placeholder="makespan:1.0, tardiness:2.0"></div>
+      </div>
+      <div class="btn-row"><button class="btn primary" onclick="saveSettings()">保存设置</button></div>
+    </div>
+
+    <div class="card">
+      <div class="flex">
+        <h2 style="margin:0">任务列表</h2>
+        <div class="spacer"></div>
+        <button class="btn primary" onclick="showForm()">＋ 新增任务</button>
+      </div>
+      <table class="mt">
+        <thead><tr>
+          <th>ID</th><th>名称</th><th class="num">工期</th><th class="num">最早开始</th>
+          <th class="num">截止</th><th class="num">权重</th><th>依赖</th>
+          <th>资源需求</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="card" id="form-card" style="display:none">
+      <h2 id="form-title">新增任务</h2>
+      <div class="form-grid">
+        <div><label>ID</label><input id="f-id" placeholder="如 T1"></div>
+        <div><label>名称</label><input id="f-name"></div>
+        <div><label>工期</label><input id="f-dur" type="number" value="1"></div>
+        <div><label>最早开始时间</label><input id="f-release" type="number" value="0"></div>
+        <div><label>截止日期（留空 = 无）</label><input id="f-due" type="number"></div>
+        <div><label>权重</label><input id="f-weight" type="number" step="0.1" value="1"></div>
+        <div class="full"><label>优先级（用于贪心规则的平局裁决）</label>
+          <input id="f-priority" type="number" step="0.1" value="1"></div>
+        <div class="full"><label>依赖（必须先完成的前置任务）</label>
+          <div id="f-deps" class="flex" style="flex-wrap:wrap"></div></div>
+        <div class="full"><label>资源需求</label>
+          <div id="f-reqs"></div>
+          <button class="btn sm" type="button" onclick="addReqRow()">＋ 资源需求</button></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveForm()">保存</button>
+        <button class="btn" onclick="hideForm()">取消</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+let problem = null;
+let editing = null;
+const objSel = document.getElementById('p-obj');
+objSel.innerHTML = OBJECTIVE_TYPES.map(t => `<option value="${t}">${objectiveLabel(t)}</option>`).join('');
+
+initSidebar('tasks.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) { document.getElementById('rows').innerHTML = '<tr><td colspan="9" class="empty">未选择问题实例。</td></tr>'; return; }
+  problem = await api('/problems/' + id);
+  fillSettings();
+  render();
+}
+
+function fillSettings() {
+  document.getElementById('p-name').value = problem.name;
+  document.getElementById('p-desc').value = problem.description;
+  document.getElementById('p-horizon').value = problem.horizon;
+  document.getElementById('p-unit').value = problem.time_unit;
+  objSel.value = problem.objective.type;
+  document.getElementById('p-weights').value =
+    Object.entries(problem.objective.weights || {}).map(([k, v]) => `${k}:${v}`).join(', ');
+}
+
+async function saveSettings() {
+  problem.name = document.getElementById('p-name').value;
+  problem.description = document.getElementById('p-desc').value;
+  problem.horizon = parseInt(document.getElementById('p-horizon').value) || 100;
+  problem.time_unit = document.getElementById('p-unit').value || 'hour';
+  problem.objective.type = objSel.value;
+  const weights = {};
+  for (const part of document.getElementById('p-weights').value.split(',')) {
+    const [k, v] = part.split(':').map(s => s.trim());
+    if (k) weights[k] = parseFloat(v) || 0;
+  }
+  problem.objective.weights = weights;
+  await save();
+}
+
+function render() {
+  document.getElementById('rows').innerHTML = problem.tasks.map(t => `
+    <tr>
+      <td class="mono">${escapeHtml(t.id)}</td>
+      <td>${escapeHtml(t.name)}</td>
+      <td class="num">${t.duration}</td>
+      <td class="num">${t.release_time}</td>
+      <td class="num">${t.due_date ?? '—'}</td>
+      <td class="num">${fmt(t.weight)}</td>
+      <td class="small">${escapeHtml((t.dependencies || []).join(', ') || '—')}</td>
+      <td class="small mono">${escapeHtml(Object.entries(t.resource_requirements || {}).map(([k,v]) => `${k}:${v}`).join(', ') || '—')}</td>
+      <td>
+        <button class="btn sm" onclick='editTask("${escapeHtml(t.id)}")'>编辑</button>
+        <button class="btn sm danger" onclick='removeTask("${escapeHtml(t.id)}")'>删除</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="9" class="empty">暂无任务。</td></tr>';
+}
+
+function depCheckboxes(selected) {
+  const deps = document.getElementById('f-deps');
+  deps.innerHTML = '';
+  problem.tasks.forEach(t => {
+    if (editing === t.id) return;
+    const lab = document.createElement('label');
+    lab.style.margin = '0 14px 0 0'; lab.style.fontSize = '13px';
+    lab.innerHTML = `<input type="checkbox" value="${escapeHtml(t.id)}"
+      ${selected.includes(t.id) ? 'checked' : ''} style="width:auto;margin-right:4px">${escapeHtml(t.id)}`;
+    deps.appendChild(lab);
+  });
+}
+
+function addReqRow(resource, amount) {
+  const div = document.createElement('div');
+  div.className = 'flex mb';
+  const sel = document.createElement('select');
+  sel.innerHTML = problem.resources.map(r =>
+    `<option ${r.id === resource ? 'selected' : ''}>${escapeHtml(r.id)}</option>`).join('')
+    || '<option value="">(无资源)</option>';
+  const amt = document.createElement('input');
+  amt.type = 'number'; amt.step = '0.5'; amt.value = amount ?? 1; amt.style.width = '90px';
+  const del = document.createElement('button');
+  del.className = 'btn sm danger'; del.type = 'button'; del.textContent = '×';
+  del.onclick = () => div.remove();
+  div.append(sel, amt, del);
+  document.getElementById('f-reqs').appendChild(div);
+}
+
+function showForm() {
+  editing = null;
+  document.getElementById('form-title').textContent = '新增任务';
+  ['f-id','f-name','f-due','f-priority'].forEach(k => document.getElementById(k).value = '');
+  document.getElementById('f-dur').value = 1; document.getElementById('f-release').value = 0;
+  document.getElementById('f-weight').value = 1;
+  document.getElementById('f-id').disabled = false;
+  document.getElementById('f-reqs').innerHTML = '';
+  depCheckboxes([]);
+  addReqRow(problem.resources[0]?.id, 1);
+  document.getElementById('form-card').style.display = 'block';
+}
+
+function editTask(id) {
+  const t = problem.tasks.find(x => x.id === id);
+  editing = id;
+  document.getElementById('form-title').textContent = '编辑任务';
+  document.getElementById('f-id').value = t.id; document.getElementById('f-name').value = t.name;
+  document.getElementById('f-dur').value = t.duration; document.getElementById('f-release').value = t.release_time;
+  document.getElementById('f-due').value = t.due_date ?? ''; document.getElementById('f-weight').value = t.weight;
+  document.getElementById('f-priority').value = t.priority;
+  document.getElementById('f-id').disabled = true;
+  document.getElementById('f-reqs').innerHTML = '';
+  depCheckboxes(t.dependencies || []);
+  Object.entries(t.resource_requirements || {}).forEach(([r, a]) => addReqRow(r, a));
+  document.getElementById('form-card').style.display = 'block';
+}
+
+function hideForm() { document.getElementById('form-card').style.display = 'none'; }
+
+function saveForm() {
+  const deps = [...document.querySelectorAll('#f-deps input:checked')].map(i => i.value);
+  const reqs = {};
+  for (const row of document.querySelectorAll('#f-reqs > div')) {
+    const [sel, amt] = row.querySelectorAll('select, input');
+    if (sel.value) reqs[sel.value] = parseFloat(amt.value) || 0;
+  }
+  const t = {
+    id: document.getElementById('f-id').value.trim(),
+    name: document.getElementById('f-name').value.trim(),
+    duration: parseInt(document.getElementById('f-dur').value) || 1,
+    release_time: parseInt(document.getElementById('f-release').value) || 0,
+    due_date: document.getElementById('f-due').value === '' ? null : parseInt(document.getElementById('f-due').value),
+    weight: parseFloat(document.getElementById('f-weight').value) || 1,
+    priority: parseFloat(document.getElementById('f-priority').value) || 1,
+    dependencies: deps,
+    resource_requirements: reqs,
+  };
+  if (!t.id) return toast('任务 ID 不能为空', 'error');
+  if (editing) {
+    const i = problem.tasks.findIndex(x => x.id === editing);
+    problem.tasks[i] = t;
+  } else {
+    if (problem.tasks.some(x => x.id === t.id)) return toast('任务 ID 重复', 'error');
+    problem.tasks.push(t);
+  }
+  save().then(() => { hideForm(); render(); });
+}
+
+function removeTask(id) {
+  problem.tasks = problem.tasks.filter(x => x.id !== id);
+  problem.tasks.forEach(t => { t.dependencies = t.dependencies.filter(d => d !== id); });
+  save().then(render);
+}
+
+async function save() {
+  const updated = await api('/problems/' + problem.id, { method: 'PUT', body: JSON.stringify(problem) });
+  problem = updated;
+  toast('已保存（版本 v' + problem.version + '）');
+  return problem;
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

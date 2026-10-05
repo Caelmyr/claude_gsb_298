@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>结果与目标值 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>优化结果与目标值</h1>
+      <span class="sub">目标构成、指标与求解器对比</span>
+    </div>
+
+    <div class="card">
+      <h2>各求解器目标值</h2>
+      <div class="chart-wrap" id="obj-chart"></div>
+    </div>
+
+    <div class="card">
+      <h2>求解方案</h2>
+      <table><thead><tr>
+        <th>求解器</th><th>状态</th><th class="num">目标值</th><th class="num">完工时间</th>
+        <th class="num">拖期</th><th class="num">成本</th><th class="num">耗时(s)</th><th></th>
+      </tr></thead><tbody id="rows"></tbody></table>
+    </div>
+
+    <div class="card" id="detail-card" style="display:none">
+      <h2 id="detail-title">方案详情</h2>
+      <div class="grid cols-4" id="detail-stats"></div>
+      <div class="grid cols-2 mt">
+        <div><h3>目标构成</h3><div class="chart-wrap" id="comp-chart"></div></div>
+        <div><h3>资源利用率</h3><table><thead><tr><th>资源</th><th class="num">利用率</th></tr></thead>
+          <tbody id="util-rows"></tbody></table></div>
+      </div>
+      <h3>任务安排</h3>
+      <table><thead><tr><th>任务</th><th class="num">开始</th><th class="num">结束</th><th>资源</th></tr></thead>
+        <tbody id="detail-assign"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script src="js/charts.js"></script>
+<script>
+let problem = null;
+let solutions = [];
+let selectedId = null;
+
+initSidebar('results.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  await loadSolutions();
+}
+
+async function loadSolutions() {
+  const r = await api(`/problems/${problem.id}/solutions`);
+  solutions = r.solutions;
+  renderTable();
+  renderObjectiveChart();
+}
+
+function renderTable() {
+  document.getElementById('rows').innerHTML = solutions.map(s => `
+    <tr style="cursor:pointer" onclick="showDetail('${s.id}')">
+      <td>${escapeHtml(solverLabel(s.solver))}</td>
+      <td>${statusBadge(s.status)}</td>
+      <td class="num"><b>${fmt(s.objective_value)}</b></td>
+      <td class="num">${fmt(s.makespan)}</td>
+      <td class="num">${fmt(s.metrics?.total_tardiness)}</td>
+      <td class="num">${fmt(s.metrics?.resource_cost)}</td>
+      <td class="num">${fmt(s.solve_time)}</td>
+      <td><button class="btn sm" onclick="event.stopPropagation();loadDetail('${s.id}')">查看</button></td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无求解结果。</td></tr>';
+}
+
+function renderObjectiveChart() {
+  const el = document.getElementById('obj-chart');
+  if (!solutions.length) { el.innerHTML = '<div class="empty">暂无数据。</div>'; return; }
+  barChart(el, {
+    labels: solutions.map(s => solverLabel(s.solver)),
+    values: solutions.map(s => s.objective_value ?? 0),
+    color: '#4e79a7',
+  });
+}
+
+async function showDetail(id) { await loadDetail(id); }
+
+async function loadDetail(id) {
+  selectedId = id;
+  const s = await api(`/problems/${problem.id}/solutions/${id}`);
+  document.getElementById('detail-card').style.display = 'block';
+  document.getElementById('detail-title').textContent = `方案详情 — ${solverLabel(s.solver)}`;
+  document.getElementById('detail-stats').innerHTML = [
+    ['目标值', fmt(s.objective_value)], ['完工时间', fmt(s.makespan)],
+    ['状态', statusLabel(s.status)], ['耗时', fmt(s.solve_time) + 's'],
+  ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+
+  const m = s.metrics || {};
+  barChart(document.getElementById('comp-chart'), {
+    labels: ['完工时间', '加权\n完工时间', '拖期', '成本', '软约束\n惩罚'],
+    values: [m.makespan || 0, m.weighted_completion || 0, m.total_tardiness || 0,
+             m.resource_cost || 0, m.soft_penalty || 0],
+    color: '#f28e2b',
+  });
+
+  document.getElementById('util-rows').innerHTML = Object.entries(m.utilisation || {}).map(([r, u]) =>
+    `<tr><td class="mono">${escapeHtml(r)}</td><td class="num">${(u * 100).toFixed(1)}%</td></tr>`).join('');
+
+  document.getElementById('detail-assign').innerHTML = s.assignments.map(a => `
+    <tr><td class="mono">${escapeHtml(a.task)}</td><td class="num">${a.start}</td>
+      <td class="num">${a.end}</td><td class="small mono">${escapeHtml((a.resources || []).join(', '))}</td></tr>`).join('');
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

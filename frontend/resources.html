@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>资源管理 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>资源管理</h1>
+      <span class="sub">人员、设备与时间资源</span>
+    </div>
+
+    <div class="card">
+      <div class="flex">
+        <h2 style="margin:0">资源列表</h2>
+        <div class="spacer"></div>
+        <button class="btn primary" onclick="showForm()">＋ 新增资源</button>
+      </div>
+      <table class="mt">
+        <thead><tr>
+          <th>ID</th><th>名称</th><th>类型</th><th class="num">容量</th>
+          <th>技能</th><th class="num">单位成本</th><th>可用时段</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="card" id="form-card" style="display:none">
+      <h2 id="form-title">新增资源</h2>
+      <div class="form-grid">
+        <div><label>ID</label><input id="f-id" placeholder="如 M1"></div>
+        <div><label>名称</label><input id="f-name" placeholder="如 机器 A"></div>
+        <div><label>类型</label><select id="f-type"></select></div>
+        <div><label>容量</label><input id="f-capacity" type="number" step="0.5" value="1"></div>
+        <div class="full"><label>技能（逗号分隔）</label><input id="f-skills" placeholder="护士, 司机"></div>
+        <div><label>单位时间成本</label><input id="f-cost" type="number" step="0.1" value="0"></div>
+        <div><label>可用时段（如 0-40,60-80 ；留空 = 始终可用）</label>
+          <input id="f-avail" placeholder="0-40, 60-80"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveForm()">保存</button>
+        <button class="btn" onclick="hideForm()">取消</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+let problem = null;
+let editing = null;
+const typeSel = document.getElementById('f-type');
+typeSel.innerHTML = RESOURCE_TYPES.map(t => `<option value="${t}">${resourceTypeLabel(t)}</option>`).join('');
+
+initSidebar('resources.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) { document.getElementById('rows').innerHTML = '<tr><td colspan="8" class="empty">未选择问题实例。</td></tr>'; return; }
+  problem = await api('/problems/' + id);
+  render();
+}
+
+function render() {
+  document.getElementById('rows').innerHTML = problem.resources.map(r => `
+    <tr>
+      <td class="mono">${escapeHtml(r.id)}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td><span class="badge muted">${escapeHtml(resourceTypeLabel(r.type))}</span></td>
+      <td class="num">${fmt(r.capacity)}</td>
+      <td>${escapeHtml((r.skills || []).join(', ') || '—')}</td>
+      <td class="num">${fmt(r.cost_per_unit)}</td>
+      <td class="small mono">${escapeHtml(r.availability ? JSON.stringify(r.availability) : '始终可用')}</td>
+      <td>
+        <button class="btn sm" onclick='editResource("${escapeHtml(r.id)}")'>编辑</button>
+        <button class="btn sm danger" onclick='removeResource("${escapeHtml(r.id)}")'>删除</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无资源。</td></tr>';
+}
+
+function showForm() { editing = null; document.getElementById('form-title').textContent = '新增资源';
+  ['f-id','f-name','f-skills','f-avail'].forEach(k => document.getElementById(k).value = '');
+  document.getElementById('f-type').value = 'personnel'; document.getElementById('f-capacity').value = 1;
+  document.getElementById('f-cost').value = 0; document.getElementById('f-id').disabled = false;
+  document.getElementById('form-card').style.display = 'block'; }
+
+function editResource(id) {
+  const r = problem.resources.find(x => x.id === id);
+  editing = id;
+  document.getElementById('form-title').textContent = '编辑资源';
+  document.getElementById('f-id').value = r.id; document.getElementById('f-name').value = r.name;
+  document.getElementById('f-type').value = r.type; document.getElementById('f-capacity').value = r.capacity;
+  document.getElementById('f-skills').value = (r.skills || []).join(', ');
+  document.getElementById('f-cost').value = r.cost_per_unit;
+  document.getElementById('f-avail').value = (r.availability || []).map(a => a.join('-')).join(', ');
+  document.getElementById('f-id').disabled = true;
+  document.getElementById('form-card').style.display = 'block';
+}
+
+function hideForm() { document.getElementById('form-card').style.display = 'none'; }
+
+function parseAvailability(s) {
+  if (!s.trim()) return null;
+  return s.split(',').map(part => {
+    const [a, b] = part.trim().split('-').map(Number);
+    return [a, b == null ? a : b];
+  });
+}
+
+function saveForm() {
+  const r = {
+    id: document.getElementById('f-id').value.trim(),
+    name: document.getElementById('f-name').value.trim(),
+    type: document.getElementById('f-type').value,
+    capacity: parseFloat(document.getElementById('f-capacity').value) || 0,
+    skills: document.getElementById('f-skills').value.split(',').map(s => s.trim()).filter(Boolean),
+    cost_per_unit: parseFloat(document.getElementById('f-cost').value) || 0,
+    availability: parseAvailability(document.getElementById('f-avail').value),
+  };
+  if (!r.id) return toast('资源 ID 不能为空', 'error');
+  if (editing) {
+    const i = problem.resources.findIndex(x => x.id === editing);
+    problem.resources[i] = r;
+  } else {
+    if (problem.resources.some(x => x.id === r.id)) return toast('资源 ID 重复', 'error');
+    problem.resources.push(r);
+  }
+  save().then(() => { hideForm(); render(); });
+}
+
+function removeResource(id) {
+  problem.resources = problem.resources.filter(x => x.id !== id);
+  save().then(render);
+}
+
+async function save() {
+  const updated = await api('/problems/' + problem.id, { method: 'PUT', body: JSON.stringify(problem) });
+  problem = updated;
+  toast('已保存（版本 v' + problem.version + '）');
+  return problem;
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

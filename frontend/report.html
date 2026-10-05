@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>报告生成 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>报告生成</h1>
+      <span class="sub">由实例、方案与敏感性分析汇总生成 Markdown 报告</span>
+    </div>
+
+    <div class="card">
+      <h2>生成报告</h2>
+      <div><label>标题</label><input id="title" placeholder="如：每周排程回顾"></div>
+      <div class="mt"><label>包含方案</label><div id="solution-checks" class="flex" style="flex-wrap:wrap"></div></div>
+      <div class="mt"><label>包含敏感性分析</label>
+        <select id="sens-select"><option value="">— 无 —</option></select></div>
+      <div class="btn-row"><button class="btn primary" onclick="generate()">生成报告</button></div>
+    </div>
+
+    <div class="card" id="view-card" style="display:none">
+      <div class="flex">
+        <h2 style="margin:0">报告预览</h2>
+        <div class="spacer"></div>
+        <button class="btn sm" onclick="download()">下载 .md</button>
+        <button class="btn sm" onclick="copyMarkdown()">复制</button>
+      </div>
+      <div id="report-view" style="line-height:1.6"></div>
+    </div>
+
+    <div class="card">
+      <h2>已保存的报告</h2>
+      <table><thead><tr><th>ID</th><th>标题</th><th>创建时间</th><th></th></tr></thead>
+        <tbody id="saved-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+let problem = null;
+let currentMarkdown = '';
+
+initSidebar('report.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  const r = await api(`/problems/${problem.id}/solutions`);
+  document.getElementById('solution-checks').innerHTML = r.solutions.map(s => `
+    <label style="margin:0 16px 8px 0;font-size:13px"><input type="checkbox" value="${s.id}" checked
+      style="width:auto;margin-right:5px">${escapeHtml(solverLabel(s.solver))}</label>`).join('')
+    || '<span class="muted">暂无求解结果。</span>';
+  const sens = await api(`/problems/${problem.id}/sensitivity`).catch(() => ({ results: [] }));
+  document.getElementById('sens-select').innerHTML = '<option value="">— 无 —</option>' +
+    sens.results.map(x => `<option value="${x.id}">${escapeHtml(x.parameter)} (${escapeHtml(SOLVER_LABELS[x.solver] || x.solver)})</option>`).join('');
+  loadSaved();
+}
+
+async function generate() {
+  const solution_ids = [...document.querySelectorAll('#solution-checks input:checked')].map(i => i.value);
+  const body = { solution_ids, title: document.getElementById('title').value || undefined };
+  const sid = document.getElementById('sens-select').value;
+  if (sid) body.sensitivity_id = sid;
+  const rep = await api(`/problems/${problem.id}/report`, { method: 'POST', body: JSON.stringify(body) });
+  currentMarkdown = rep.content;
+  document.getElementById('view-card').style.display = 'block';
+  document.getElementById('report-view').innerHTML = md2html(rep.content);
+  loadSaved();
+  toast('报告已生成');
+}
+
+function download() {
+  const blob = new Blob([currentMarkdown], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (problem.id + '_report.md');
+  a.click();
+}
+
+function copyMarkdown() {
+  navigator.clipboard.writeText(currentMarkdown).then(() => toast('已复制'));
+}
+
+async function loadSaved() {
+  const { reports } = await api(`/problems/${problem.id}/reports`).catch(() => ({ reports: [] }));
+  document.getElementById('saved-rows').innerHTML = reports.map(r => `
+    <tr><td class="mono">${escapeHtml(r.id)}</td><td>${escapeHtml(r.title)}</td>
+      <td class="small muted">${escapeHtml(r.created_at)}</td>
+      <td><button class="btn sm" onclick='viewReport(${JSON.stringify(r.content).replace(/'/g, "&#39;")})'>查看</button></td></tr>`).join('')
+    || '<tr><td colspan="4" class="empty">暂无报告。</td></tr>';
+}
+
+function viewReport(content) {
+  currentMarkdown = content;
+  document.getElementById('view-card').style.display = 'block';
+  document.getElementById('report-view').innerHTML = md2html(content);
+}
+
+/* Minimal Markdown -> HTML for the report's structure. */
+function md2html(md) {
+  const lines = md.split('\n');
+  let html = '', inTable = false;
+  for (const raw of lines) {
+    let line = raw;
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      const cells = line.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const isSep = cells.every(c => /^:?-+:?$/.test(c));
+      if (!inTable) { html += '<table style="border-collapse:collapse;font-size:13px">'; inTable = true; }
+      if (isSep) continue;
+      html += '<tr>' + cells.map(c => `<td style="border:1px solid #e5e7eb;padding:5px 9px">${inline(c)}</td>`).join('') + '</tr>';
+      continue;
+    } else if (inTable) { html += '</table>'; inTable = false; }
+
+    if (line.startsWith('# ')) html += `<h1 style="font-size:20px;margin:14px 0 6px">${inline(line.slice(2))}</h1>`;
+    else if (line.startsWith('## ')) html += `<h2 style="font-size:16px;margin:12px 0 4px;border-bottom:1px solid #e5e7eb;padding-bottom:3px">${inline(line.slice(3))}</h2>`;
+    else if (line.startsWith('### ')) html += `<h3 style="font-size:14px;margin:10px 0 2px">${inline(line.slice(4))}</h3>`;
+    else if (line.startsWith('- ')) html += `<li style="margin-left:18px">${inline(line.slice(2))}</li>`;
+    else if (line.trim() === '') html += '<div style="height:4px"></div>';
+    else html += `<div>${inline(line)}</div>`;
+  }
+  if (inTable) html += '</table>';
+  return html;
+}
+
+function inline(s) {
+  return escapeHtml(s)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`(.+?)`/g, '<code style="font-family:monospace;background:#f3f4f6;padding:1px 5px;border-radius:4px">$1</code>');
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

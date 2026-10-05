@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>甘特图 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>甘特图与排程可视化</h1>
+      <span class="sub">已记录方案的任务 / 资源时间轴</span>
+    </div>
+
+    <div class="card">
+      <div class="flex" style="flex-wrap:wrap">
+        <div style="min-width:220px"><label>求解方案</label><select id="solution-picker"></select></div>
+        <div style="min-width:160px"><label>视图</label>
+          <select id="mode"><option value="resource">按资源</option><option value="task">按任务</option></select></div>
+        <div style="min-width:160px"><label>快速求解</label>
+          <select id="quick-solver"></select></div>
+        <div style="align-self:flex-end">
+          <button class="btn primary" onclick="quickSolve()">求解并显示</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="flex">
+        <h2 style="margin:0" id="chart-title">甘特图</h2>
+        <div class="spacer"></div>
+        <span class="badge info" id="sol-meta"></span>
+      </div>
+      <div id="gantt-container"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="card">
+      <h2>任务安排</h2>
+      <table><thead><tr><th>任务</th><th class="num">开始</th><th class="num">结束</th><th class="num">工期</th><th>资源</th></tr></thead>
+        <tbody id="assignment-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script src="js/gantt.js"></script>
+<script>
+let problem = null;
+let solution = null;
+const quickSel = document.getElementById('quick-solver');
+quickSel.innerHTML = SOLVER_NAMES.map(n => `<option value="${n}" ${n === 'genetic' ? 'selected' : ''}>${SOLVER_LABELS[n]}</option>`).join('');
+
+initSidebar('gantt.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  await loadSolutions();
+}
+
+async function loadSolutions(preferred) {
+  const { solutions } = await api(`/problems/${problem.id}/solutions`);
+  const sel = document.getElementById('solution-picker');
+  sel.innerHTML = solutions.length
+    ? solutions.map(s => `<option value="${s.id}" ${s.id === preferred ? 'selected' : ''}>${escapeHtml(SOLVER_LABELS[s.solver] || s.solver)} · 目标 ${fmt(s.objective_value)} · ${escapeHtml(s.created_at)}</option>`).join('')
+    : '<option value="">— 暂无求解结果 —</option>';
+  if (solutions.length) {
+    const id = preferred || solutions[solutions.length - 1].id;
+    sel.value = id;
+    await showSolution(id);
+  } else {
+    document.getElementById('gantt-container').innerHTML = '<div class="empty">暂无求解结果 — 可执行快速求解。</div>';
+  }
+}
+
+async function showSolution(id) {
+  if (!id) return;
+  solution = await api(`/problems/${problem.id}/solutions/${id}`);
+  render();
+}
+
+function render() {
+  const mode = document.getElementById('mode').value;
+  document.getElementById('chart-title').textContent =
+    `甘特图 — ${SOLVER_LABELS[solution.solver] || solution.solver}（${mode === 'task' ? '按任务' : '按资源'}）`;
+  document.getElementById('sol-meta').textContent =
+    `目标 ${fmt(solution.objective_value)} · 完工时间 ${fmt(solution.makespan)} · ${statusLabel(solution.status)}`;
+  renderGantt(document.getElementById('gantt-container'), {
+    problem, assignments: solution.assignments, mode,
+    title: `排程 — ${SOLVER_LABELS[solution.solver] || solution.solver}`,
+  });
+  document.getElementById('legend').innerHTML = problem.resources.map((r, i) =>
+    `<span><span class="swatch" style="background:${PALETTE[i % PALETTE.length]}"></span>${escapeHtml(r.id)}</span>`).join('');
+  document.getElementById('assignment-rows').innerHTML = solution.assignments.map(a => `
+    <tr><td class="mono">${escapeHtml(a.task)}</td>
+      <td class="num">${a.start}</td><td class="num">${a.end}</td>
+      <td class="num">${a.end - a.start}</td>
+      <td class="small mono">${escapeHtml((a.resources || []).join(', '))}</td></tr>`).join('');
+}
+
+async function quickSolve() {
+  const sol = await api(`/problems/${problem.id}/solve`, {
+    method: 'POST', body: JSON.stringify({ solver: quickSel.value }),
+  });
+  toast(`已用 ${SOLVER_LABELS[quickSel.value]} 求解：目标值 ${fmt(sol.objective_value)}`);
+  await loadSolutions(sol.id);
+}
+
+document.getElementById('solution-picker').addEventListener('change', e => showSolution(e.target.value));
+document.getElementById('mode').addEventListener('change', render);
+
+const q = new URLSearchParams(location.search).get('solution');
+load().then(() => { if (q) { document.getElementById('solution-picker').value = q; showSolution(q); } })
+  .catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

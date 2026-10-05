@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方案对比 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>方案对比</h1>
+      <span class="sub">不同求解方案在目标与指标上的并排对比</span>
+    </div>
+
+    <div class="card">
+      <h2>选择要对比的方案</h2>
+      <div id="solution-checks" class="flex" style="flex-wrap:wrap"></div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="compare()">对比所选</button>
+        <button class="btn" onclick="toggleAll(true)">全选</button>
+        <button class="btn" onclick="toggleAll(false)">清空</button>
+      </div>
+    </div>
+
+    <div class="card" id="result-card" style="display:none">
+      <h2>对比结果</h2>
+      <div class="chart-wrap" id="bar-chart"></div>
+      <table class="mt"><thead><tr>
+        <th>求解器</th><th>状态</th><th class="num">目标值</th><th class="num">与最优差距</th>
+        <th class="num">完工时间</th><th class="num">拖期</th><th class="num">成本</th>
+        <th class="num">耗时(s)</th><th class="num">下界</th><th></th>
+      </tr></thead><tbody id="rows"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>全部方案一览</h2>
+      <table><thead><tr><th>ID</th><th>求解器</th><th class="num">目标值</th><th class="num">完工时间</th><th>创建时间</th></tr></thead>
+        <tbody id="all-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script src="js/charts.js"></script>
+<script>
+let problem = null;
+let solutions = [];
+
+initSidebar('compare.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  const r = await api(`/problems/${problem.id}/solutions`);
+  solutions = r.solutions;
+  renderChecks();
+  renderAll();
+}
+
+function renderChecks() {
+  const el = document.getElementById('solution-checks');
+  el.innerHTML = solutions.map((s, i) => `
+    <label style="margin:0 16px 8px 0;font-size:13px;color:var(--ink)">
+      <input type="checkbox" value="${s.id}" style="width:auto;margin-right:5px">
+      ${escapeHtml(solverLabel(s.solver))} <span class="muted">(${fmt(s.objective_value)})</span>
+    </label>`).join('') || '<span class="muted">暂无求解结果。</span>';
+}
+
+function selected() {
+  return [...document.querySelectorAll('#solution-checks input:checked')].map(i => i.value);
+}
+
+function toggleAll(on) {
+  document.querySelectorAll('#solution-checks input').forEach(i => i.checked = on);
+}
+
+async function compare() {
+  const ids = selected();
+  if (!ids.length) return toast('请至少选择一个方案', 'error');
+  const { solutions: rows } = await api(`/problems/${problem.id}/compare`, {
+    method: 'POST', body: JSON.stringify({ solution_ids: ids }),
+  });
+  document.getElementById('result-card').style.display = 'block';
+  barChart(document.getElementById('bar-chart'), {
+    labels: rows.map(s => solverLabel(s.solver) + (s.is_best ? ' ★' : '')),
+    values: rows.map(s => s.objective_value ?? 0),
+    color: '#59a14f',
+  });
+  document.getElementById('rows').innerHTML = rows.map(s => `
+    <tr ${s.is_best ? 'style="background:#f0fdf4"' : ''}>
+      <td>${escapeHtml(solverLabel(s.solver))} ${s.is_best ? '<span class="badge ok">最优</span>' : ''}</td>
+      <td>${statusBadge(s.status)}</td>
+      <td class="num"><b>${fmt(s.objective_value)}</b></td>
+      <td class="num">${s.delta_vs_best == null ? '—' : (s.delta_vs_best > 0 ? '+' : '') + fmt(s.delta_vs_best)}</td>
+      <td class="num">${fmt(s.makespan)}</td>
+      <td class="num">${fmt(s.metrics?.total_tardiness)}</td>
+      <td class="num">${fmt(s.metrics?.resource_cost)}</td>
+      <td class="num">${fmt(s.solve_time)}</td>
+      <td class="num">${fmt(s.lower_bound)}</td>
+      <td><a href="gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(s.id)}">甘特图</a></td>
+    </tr>`).join('');
+}
+
+function renderAll() {
+  document.getElementById('all-rows').innerHTML = solutions.map(s => `
+    <tr><td class="mono">${escapeHtml(s.id)}</td><td>${escapeHtml(solverLabel(s.solver))}</td>
+      <td class="num">${fmt(s.objective_value)}</td><td class="num">${fmt(s.makespan)}</td>
+      <td class="small muted">${escapeHtml(s.created_at)}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="empty">暂无求解结果。</td></tr>';
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

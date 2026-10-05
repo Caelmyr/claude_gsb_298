@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>仪表盘 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>仪表盘</h1>
+      <span class="sub">实例、资源与最近求解概览</span>
+    </div>
+
+    <div class="grid cols-4" id="stats"></div>
+
+    <div class="card">
+      <h2>问题实例</h2>
+      <table>
+        <thead><tr>
+          <th>ID</th><th>名称</th><th class="num">版本</th>
+          <th class="num">任务数</th><th class="num">资源数</th>
+          <th>目标</th><th>更新时间</th><th></th>
+        </tr></thead>
+        <tbody id="problem-rows"></tbody>
+      </table>
+      <div class="btn-row">
+        <button class="btn primary" onclick="location.href='resources.html'">新建实例</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>最近求解结果</h2>
+      <table>
+        <thead><tr>
+          <th>实例</th><th>求解器</th><th>状态</th>
+          <th class="num">目标值</th><th class="num">完工时间</th><th>时间</th>
+        </tr></thead>
+        <tbody id="latest-rows"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+initSidebar('index.html');
+
+async function loadStats() {
+  const { problems } = await api('/problems');
+  const counts = { tasks: 0, resources: 0, problems: problems.length };
+  let solutions = 0;
+  for (const p of problems) {
+    counts.tasks += p.n_tasks;
+    counts.resources += p.n_resources;
+    const r = await api(`/problems/${p.id}/solutions`).catch(() => ({ solutions: [] }));
+    solutions += r.solutions.length;
+  }
+  document.getElementById('stats').innerHTML = [
+    statTile(problems.length, '问题实例', '以 JSON 文件存储的实例总数'),
+    statTile(counts.tasks, '任务', '所有实例中的任务总数'),
+    statTile(counts.resources, '资源', '人员 / 设备 / 时间资源'),
+    statTile(solutions, '求解结果', '已记录的求解运行次数'),
+  ].join('');
+
+  document.getElementById('problem-rows').innerHTML = problems.map(p => `
+    <tr>
+      <td class="mono">${escapeHtml(p.id)}</td>
+      <td>${escapeHtml(p.name)}</td>
+      <td class="num">v${p.version}</td>
+      <td class="num">${p.n_tasks}</td>
+      <td class="num">${p.n_resources}</td>
+      <td><span class="badge info">${escapeHtml(objectiveLabel(p.objective))}</span></td>
+      <td class="small muted">${escapeHtml(p.updated_at)}</td>
+      <td><a href="gantt.html?id=${encodeURIComponent(p.id)}">打开</a></td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无实例 — 请从「资源管理」页新建。</td></tr>';
+}
+
+async function loadLatest() {
+  const { problems } = await api('/problems');
+  let rows = [];
+  for (const p of problems) {
+    const r = await api(`/problems/${p.id}/solutions`).catch(() => ({ solutions: [] }));
+    for (const s of r.solutions) rows.push({ ...s, problem: p.id, name: p.name });
+  }
+  rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  document.getElementById('latest-rows').innerHTML = rows.slice(0, 12).map(s => `
+    <tr>
+      <td class="mono">${escapeHtml(s.problem)}</td>
+      <td>${escapeHtml(solverLabel(s.solver))}</td>
+      <td>${statusBadge(s.status)}</td>
+      <td class="num">${fmt(s.objective_value)}</td>
+      <td class="num">${fmt(s.makespan)}</td>
+      <td class="small muted">${escapeHtml(s.created_at)}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">暂无求解结果。</td></tr>';
+}
+
+function statTile(value, label, hint) {
+  return `<div class="stat"><div class="label">${label}</div>
+    <div class="value">${value}</div><div class="hint">${hint}</div></div>`;
+}
+
+loadStats().catch(e => toast(e.message, 'error'));
+loadLatest().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

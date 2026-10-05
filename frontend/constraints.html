@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>约束配置 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>约束配置</h1>
+      <span class="sub">硬约束（可行性）与软约束（惩罚）</span>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <div class="flex"><h2 style="margin:0">硬约束</h2>
+          <div class="spacer"></div>
+          <button class="btn primary sm" onclick="showForm('hard')">＋ 新增</button></div>
+        <table class="mt"><thead><tr><th>ID</th><th>类型</th><th>参数</th><th></th></tr></thead>
+          <tbody id="hard-rows"></tbody></table>
+      </div>
+      <div class="card">
+        <div class="flex"><h2 style="margin:0">软约束</h2>
+          <div class="spacer"></div>
+          <button class="btn primary sm" onclick="showForm('soft')">＋ 新增</button></div>
+        <table class="mt"><thead><tr><th>ID</th><th>类型</th><th>参数</th><th class="num">惩罚</th><th></th></tr></thead>
+          <tbody id="soft-rows"></tbody></table>
+      </div>
+    </div>
+
+    <div class="card" id="form-card" style="display:none">
+      <h2 id="form-title">新增约束</h2>
+      <div class="form-grid">
+        <div><label>ID</label><input id="f-id"></div>
+        <div><label>类型</label><select id="f-type"></select></div>
+        <div id="f-penalty-wrap" style="display:none"><label>惩罚</label>
+          <input id="f-penalty" type="number" step="0.1" value="1"></div>
+        <div class="full" id="f-fields"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="saveForm()">保存</button>
+        <button class="btn" onclick="hideForm()">取消</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+let problem = null;
+let editing = null;
+let currentKind = 'hard';
+
+const FIELD_SPECS = {
+  precedence: [{ key: 'before', label: '前置任务', type: 'task' },
+               { key: 'after', label: '后继任务', type: 'task' }],
+  time_window: [{ key: 'task', label: '任务', type: 'task' },
+                { key: 'release', label: '最早开始', type: 'number' },
+                { key: 'deadline', label: '截止', type: 'number' }],
+  fixed_start: [{ key: 'task', label: '任务', type: 'task' },
+                { key: 'start', label: '开始时间', type: 'number' }],
+  resource_capacity: [{ key: 'resource', label: '资源', type: 'resource' },
+                      { key: 'capacity', label: '容量', type: 'number' }],
+  non_overlap: [{ key: 'tasks', label: '任务组', type: 'tasks' }],
+  max_concurrent: [{ key: 'limit', label: '最大并发数', type: 'number' }],
+  resource_assignment: [{ key: 'task', label: '任务', type: 'task' },
+                        { key: 'resources', label: '资源', type: 'resources' }],
+  due_date: [{ key: 'task', label: '任务', type: 'task' },
+             { key: 'due', label: '截止', type: 'number' }],
+  preferred_window: [{ key: 'task', label: '任务', type: 'task' },
+                     { key: 'start', label: '开始', type: 'number' },
+                     { key: 'end', label: '结束', type: 'number' }],
+  min_gap: [{ key: 'a', label: '任务 A', type: 'task' },
+            { key: 'b', label: '任务 B', type: 'task' },
+            { key: 'gap', label: '间隔', type: 'number' }],
+  resource_balance: [{ key: 'resource', label: '资源', type: 'resource' },
+                     { key: 'target_load', label: '目标负载', type: 'number' }],
+  setup_time: [{ key: 'resource', label: '资源', type: 'resource' },
+               { key: 'setup', label: '准备时间', type: 'number' }],
+  max_makespan: [{ key: 'target', label: '目标完工时间', type: 'number' }],
+};
+
+initSidebar('constraints.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  render();
+}
+
+function render() {
+  document.getElementById('hard-rows').innerHTML = problem.hard_constraints.map(c => `
+    <tr><td class="mono">${escapeHtml(c.id)}</td>
+      <td><span class="badge bad">${escapeHtml(constraintLabel(c.type))}</span></td>
+      <td class="small mono">${escapeHtml(JSON.stringify(c.params))}</td>
+      <td><button class="btn sm" onclick='editConstraint("hard","${escapeHtml(c.id)}")'>编辑</button>
+          <button class="btn sm danger" onclick='removeConstraint("hard","${escapeHtml(c.id)}")'>×</button></td></tr>`).join('')
+    || '<tr><td colspan="4" class="empty">无</td></tr>';
+
+  document.getElementById('soft-rows').innerHTML = problem.soft_constraints.map(c => `
+    <tr><td class="mono">${escapeHtml(c.id)}</td>
+      <td><span class="badge warn">${escapeHtml(constraintLabel(c.type))}</span></td>
+      <td class="small mono">${escapeHtml(JSON.stringify(c.params))}</td>
+      <td class="num">${fmt(c.penalty)}</td>
+      <td><button class="btn sm" onclick='editConstraint("soft","${escapeHtml(c.id)}")'>编辑</button>
+          <button class="btn sm danger" onclick='removeConstraint("soft","${escapeHtml(c.id)}")'>×</button></td></tr>`).join('')
+    || '<tr><td colspan="5" class="empty">无</td></tr>';
+}
+
+function typeOptions(types, selected) {
+  return types.map(t => `<option value="${t}" ${t === selected ? 'selected' : ''}>${constraintLabel(t)}</option>`).join('');
+}
+
+function showForm(kind) {
+  currentKind = kind;
+  editing = null;
+  document.getElementById('form-title').textContent = (kind === 'hard' ? '新增硬' : '新增软') + '约束';
+  document.getElementById('f-id').value = '';
+  document.getElementById('f-id').disabled = false;
+  const types = kind === 'hard' ? HARD_CONSTRAINT_TYPES : SOFT_CONSTRAINT_TYPES;
+  document.getElementById('f-type').innerHTML = typeOptions(types);
+  document.getElementById('f-penalty-wrap').style.display = kind === 'soft' ? '' : 'none';
+  document.getElementById('f-penalty').value = 1;
+  renderFields();
+  document.getElementById('form-card').style.display = 'block';
+}
+
+function editConstraint(kind, id) {
+  currentKind = kind;
+  editing = id;
+  const list = kind === 'hard' ? problem.hard_constraints : problem.soft_constraints;
+  const c = list.find(x => x.id === id);
+  document.getElementById('form-title').textContent = '编辑约束';
+  document.getElementById('f-id').value = c.id;
+  document.getElementById('f-id').disabled = true;
+  const types = kind === 'hard' ? HARD_CONSTRAINT_TYPES : SOFT_CONSTRAINT_TYPES;
+  document.getElementById('f-type').innerHTML = typeOptions(types, c.type);
+  document.getElementById('f-penalty-wrap').style.display = kind === 'soft' ? '' : 'none';
+  document.getElementById('f-penalty').value = c.penalty;
+  renderFields(c.params);
+  document.getElementById('form-card').style.display = 'block';
+}
+
+function renderFields(params = {}) {
+  const type = document.getElementById('f-type').value;
+  const container = document.getElementById('f-fields');
+  container.innerHTML = '';
+  for (const spec of FIELD_SPECS[type] || []) {
+    const div = document.createElement('div');
+    if (spec.type === 'number') {
+      div.innerHTML = `<label>${spec.label}</label>
+        <input type="number" step="1" id="field-${spec.key}" value="${params[spec.key] ?? ''}">`;
+    } else if (spec.type === 'task' || spec.type === 'resource') {
+      const opts = (spec.type === 'task' ? problem.tasks.map(t => t.id) : problem.resources.map(r => r.id));
+      div.innerHTML = `<label>${spec.label}</label>
+        <select id="field-${spec.key}"><option value="">—</option>${opts.map(o =>
+          `<option ${params[spec.key] === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select>`;
+    } else if (spec.type === 'tasks' || spec.type === 'resources') {
+      const opts = (spec.type === 'tasks' ? problem.tasks.map(t => t.id) : problem.resources.map(r => r.id));
+      const selected = params[spec.key] || [];
+      div.innerHTML = `<label>${spec.label}</label><div class="flex" style="flex-wrap:wrap">` +
+        opts.map(o => `<label style="margin:0 12px 0 0"><input type="checkbox" value="${escapeHtml(o)}"
+          ${selected.includes(o) ? 'checked' : ''} style="width:auto;margin-right:4px">${escapeHtml(o)}</label>`).join('') +
+        `</div>`;
+    }
+    container.appendChild(div);
+  }
+}
+
+function hideForm() { document.getElementById('form-card').style.display = 'none'; }
+
+function saveForm() {
+  const type = document.getElementById('f-type').value;
+  const id = document.getElementById('f-id').value.trim();
+  const params = {};
+  for (const spec of FIELD_SPECS[type] || []) {
+    if (spec.type === 'number') {
+      const v = document.getElementById('field-' + spec.key).value;
+      if (v !== '') params[spec.key] = Number(v);
+    } else if (spec.type === 'task' || spec.type === 'resource') {
+      const v = document.getElementById('field-' + spec.key).value;
+      if (v) params[spec.key] = v;
+    } else {
+      params[spec.key] = [...document.querySelectorAll('#field-' + spec.key + ':checked')].map(i => i.value);
+    }
+  }
+  if (!id) return toast('约束 ID 不能为空', 'error');
+  const list = currentKind === 'hard' ? problem.hard_constraints : problem.soft_constraints;
+  if (currentKind === 'hard') {
+    const obj = { id, type, params };
+    const i = list.findIndex(x => x.id === editing);
+    if (i >= 0) list[i] = obj; else list.push(obj);
+  } else {
+    const obj = { id, type, params, penalty: parseFloat(document.getElementById('f-penalty').value) || 1, factor: 1 };
+    const i = list.findIndex(x => x.id === editing);
+    if (i >= 0) list[i] = obj; else list.push(obj);
+  }
+  save().then(() => { hideForm(); render(); });
+}
+
+function removeConstraint(kind, id) {
+  if (kind === 'hard') problem.hard_constraints = problem.hard_constraints.filter(c => c.id !== id);
+  else problem.soft_constraints = problem.soft_constraints.filter(c => c.id !== id);
+  save().then(render);
+}
+
+async function save() {
+  const updated = await api('/problems/' + problem.id, { method: 'PUT', body: JSON.stringify(problem) });
+  problem = updated;
+  toast('已保存（版本 v' + problem.version + '）');
+}
+
+document.getElementById('f-type').addEventListener('change', () => renderFields());
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

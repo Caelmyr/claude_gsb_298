@@ -1,0 +1,225 @@
+{
+  "id": "demo_staffing",
+  "name": "班次排班示例",
+  "description": "带技能的人员、硬时间窗口与软截止/偏好惩罚；目标为加权完工时间。",
+  "horizon": 60,
+  "time_unit": "小时",
+  "resources": [
+    {
+      "id": "P1",
+      "name": "护士甲",
+      "type": "personnel",
+      "capacity": 1,
+      "skills": [
+        "护理"
+      ],
+      "cost_per_unit": 12.0,
+      "availability": null
+    },
+    {
+      "id": "P2",
+      "name": "护士乙",
+      "type": "personnel",
+      "capacity": 1,
+      "skills": [
+        "护理",
+        "转运"
+      ],
+      "cost_per_unit": 10.0,
+      "availability": null
+    },
+    {
+      "id": "P3",
+      "name": "护士丙",
+      "type": "personnel",
+      "capacity": 1,
+      "skills": [
+        "护理"
+      ],
+      "cost_per_unit": 11.0,
+      "availability": null
+    },
+    {
+      "id": "R1",
+      "name": "检查室",
+      "type": "equipment",
+      "capacity": 2,
+      "skills": [],
+      "cost_per_unit": 2.0,
+      "availability": null
+    },
+    {
+      "id": "T1",
+      "name": "日班",
+      "type": "time",
+      "capacity": 3,
+      "skills": [],
+      "cost_per_unit": 0.0,
+      "availability": [
+        [
+          0,
+          60
+        ]
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "A1",
+      "name": "入院1",
+      "duration": 6,
+      "resource_requirements": {
+        "P1": 1,
+        "R1": 1,
+        "T1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 10,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "A2",
+      "name": "入院2",
+      "duration": 6,
+      "resource_requirements": {
+        "P2": 1,
+        "R1": 1,
+        "T1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 12,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "A3",
+      "name": "入院3",
+      "duration": 6,
+      "resource_requirements": {
+        "P3": 1,
+        "R1": 1,
+        "T1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 14,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "B1",
+      "name": "治疗1",
+      "duration": 8,
+      "resource_requirements": {
+        "P1": 1,
+        "T1": 1
+      },
+      "dependencies": [
+        "A1"
+      ],
+      "release_time": 0,
+      "due_date": 22,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "B2",
+      "name": "治疗2",
+      "duration": 8,
+      "resource_requirements": {
+        "P2": 1,
+        "T1": 1
+      },
+      "dependencies": [
+        "A2"
+      ],
+      "release_time": 0,
+      "due_date": 24,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "B3",
+      "name": "治疗3",
+      "duration": 8,
+      "resource_requirements": {
+        "P3": 1,
+        "T1": 1
+      },
+      "dependencies": [
+        "A3"
+      ],
+      "release_time": 0,
+      "due_date": 26,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "C1",
+      "name": "转运",
+      "duration": 3,
+      "resource_requirements": {
+        "P2": 1
+      },
+      "dependencies": [
+        "B1",
+        "B2"
+      ],
+      "release_time": 0,
+      "due_date": 30,
+      "weight": 3,
+      "priority": 1.0
+    }
+  ],
+  "hard_constraints": [
+    {
+      "id": "hc1",
+      "type": "time_window",
+      "params": {
+        "task": "C1",
+        "release": 15
+      }
+    },
+    {
+      "id": "hc2",
+      "type": "max_concurrent",
+      "params": {
+        "limit": 2
+      }
+    }
+  ],
+  "soft_constraints": [
+    {
+      "id": "sc1",
+      "type": "due_date",
+      "params": {
+        "task": "C1"
+      },
+      "penalty": 5.0,
+      "factor": 1.0
+    },
+    {
+      "id": "sc2",
+      "type": "preferred_window",
+      "params": {
+        "task": "B2",
+        "start": 10,
+        "end": 20
+      },
+      "penalty": 0.5,
+      "factor": 1.0
+    }
+  ],
+  "objective": {
+    "type": "weighted_completion",
+    "weights": {},
+    "minimize": true,
+    "params": {}
+  },
+  "version": 1,
+  "created_at": "2026-10-05T14:04:06",
+  "updated_at": "2026-10-05T14:04:06"
+}

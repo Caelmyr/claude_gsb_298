@@ -1,0 +1,1133 @@
+{
+  "id": "demo_large",
+  "name": "大型作业车间（25 个作业）",
+  "description": "75 道工序、4 台机器；面向元启发式算法。",
+  "horizon": 200,
+  "time_unit": "分钟",
+  "resources": [
+    {
+      "id": "M1",
+      "name": "机器 1",
+      "type": "equipment",
+      "capacity": 1,
+      "skills": [],
+      "cost_per_unit": 1.0,
+      "availability": null
+    },
+    {
+      "id": "M2",
+      "name": "机器 2",
+      "type": "equipment",
+      "capacity": 1,
+      "skills": [],
+      "cost_per_unit": 2.0,
+      "availability": null
+    },
+    {
+      "id": "M3",
+      "name": "机器 3",
+      "type": "equipment",
+      "capacity": 1,
+      "skills": [],
+      "cost_per_unit": 3.0,
+      "availability": null
+    },
+    {
+      "id": "M4",
+      "name": "机器 4",
+      "type": "equipment",
+      "capacity": 1,
+      "skills": [],
+      "cost_per_unit": 4.0,
+      "availability": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "J1O0",
+      "name": "作业 1 工序 0",
+      "duration": 2,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 13,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J1O1",
+      "name": "作业 1 工序 1",
+      "duration": 3,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J1O0"
+      ],
+      "release_time": 0,
+      "due_date": 14,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J1O2",
+      "name": "作业 1 工序 2",
+      "duration": 4,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J1O1"
+      ],
+      "release_time": 0,
+      "due_date": 15,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J2O0",
+      "name": "作业 2 工序 0",
+      "duration": 3,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 14,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J2O1",
+      "name": "作业 2 工序 1",
+      "duration": 4,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J2O0"
+      ],
+      "release_time": 0,
+      "due_date": 15,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J2O2",
+      "name": "作业 2 工序 2",
+      "duration": 5,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J2O1"
+      ],
+      "release_time": 0,
+      "due_date": 16,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J3O0",
+      "name": "作业 3 工序 0",
+      "duration": 4,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 15,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J3O1",
+      "name": "作业 3 工序 1",
+      "duration": 5,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J3O0"
+      ],
+      "release_time": 0,
+      "due_date": 16,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J3O2",
+      "name": "作业 3 工序 2",
+      "duration": 6,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J3O1"
+      ],
+      "release_time": 0,
+      "due_date": 17,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J4O0",
+      "name": "作业 4 工序 0",
+      "duration": 5,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 16,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J4O1",
+      "name": "作业 4 工序 1",
+      "duration": 6,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J4O0"
+      ],
+      "release_time": 0,
+      "due_date": 17,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J4O2",
+      "name": "作业 4 工序 2",
+      "duration": 1,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J4O1"
+      ],
+      "release_time": 0,
+      "due_date": 18,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J5O0",
+      "name": "作业 5 工序 0",
+      "duration": 6,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 17,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J5O1",
+      "name": "作业 5 工序 1",
+      "duration": 1,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J5O0"
+      ],
+      "release_time": 0,
+      "due_date": 18,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J5O2",
+      "name": "作业 5 工序 2",
+      "duration": 2,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J5O1"
+      ],
+      "release_time": 0,
+      "due_date": 19,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J6O0",
+      "name": "作业 6 工序 0",
+      "duration": 1,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 18,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J6O1",
+      "name": "作业 6 工序 1",
+      "duration": 2,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J6O0"
+      ],
+      "release_time": 0,
+      "due_date": 19,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J6O2",
+      "name": "作业 6 工序 2",
+      "duration": 3,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J6O1"
+      ],
+      "release_time": 0,
+      "due_date": 20,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J7O0",
+      "name": "作业 7 工序 0",
+      "duration": 2,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 19,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J7O1",
+      "name": "作业 7 工序 1",
+      "duration": 3,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J7O0"
+      ],
+      "release_time": 0,
+      "due_date": 20,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J7O2",
+      "name": "作业 7 工序 2",
+      "duration": 4,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J7O1"
+      ],
+      "release_time": 0,
+      "due_date": 21,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J8O0",
+      "name": "作业 8 工序 0",
+      "duration": 3,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 20,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J8O1",
+      "name": "作业 8 工序 1",
+      "duration": 4,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J8O0"
+      ],
+      "release_time": 0,
+      "due_date": 21,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J8O2",
+      "name": "作业 8 工序 2",
+      "duration": 5,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J8O1"
+      ],
+      "release_time": 0,
+      "due_date": 22,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J9O0",
+      "name": "作业 9 工序 0",
+      "duration": 4,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 21,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J9O1",
+      "name": "作业 9 工序 1",
+      "duration": 5,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J9O0"
+      ],
+      "release_time": 0,
+      "due_date": 22,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J9O2",
+      "name": "作业 9 工序 2",
+      "duration": 6,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J9O1"
+      ],
+      "release_time": 0,
+      "due_date": 23,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J10O0",
+      "name": "作业 10 工序 0",
+      "duration": 5,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 22,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J10O1",
+      "name": "作业 10 工序 1",
+      "duration": 6,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J10O0"
+      ],
+      "release_time": 0,
+      "due_date": 23,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J10O2",
+      "name": "作业 10 工序 2",
+      "duration": 1,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J10O1"
+      ],
+      "release_time": 0,
+      "due_date": 24,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J11O0",
+      "name": "作业 11 工序 0",
+      "duration": 6,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 23,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J11O1",
+      "name": "作业 11 工序 1",
+      "duration": 1,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J11O0"
+      ],
+      "release_time": 0,
+      "due_date": 24,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J11O2",
+      "name": "作业 11 工序 2",
+      "duration": 2,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J11O1"
+      ],
+      "release_time": 0,
+      "due_date": 25,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J12O0",
+      "name": "作业 12 工序 0",
+      "duration": 1,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 24,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J12O1",
+      "name": "作业 12 工序 1",
+      "duration": 2,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J12O0"
+      ],
+      "release_time": 0,
+      "due_date": 25,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J12O2",
+      "name": "作业 12 工序 2",
+      "duration": 3,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J12O1"
+      ],
+      "release_time": 0,
+      "due_date": 26,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J13O0",
+      "name": "作业 13 工序 0",
+      "duration": 2,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 25,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J13O1",
+      "name": "作业 13 工序 1",
+      "duration": 3,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J13O0"
+      ],
+      "release_time": 0,
+      "due_date": 26,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J13O2",
+      "name": "作业 13 工序 2",
+      "duration": 4,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J13O1"
+      ],
+      "release_time": 0,
+      "due_date": 27,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J14O0",
+      "name": "作业 14 工序 0",
+      "duration": 3,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 26,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J14O1",
+      "name": "作业 14 工序 1",
+      "duration": 4,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J14O0"
+      ],
+      "release_time": 0,
+      "due_date": 27,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J14O2",
+      "name": "作业 14 工序 2",
+      "duration": 5,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J14O1"
+      ],
+      "release_time": 0,
+      "due_date": 28,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J15O0",
+      "name": "作业 15 工序 0",
+      "duration": 4,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 27,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J15O1",
+      "name": "作业 15 工序 1",
+      "duration": 5,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J15O0"
+      ],
+      "release_time": 0,
+      "due_date": 28,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J15O2",
+      "name": "作业 15 工序 2",
+      "duration": 6,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J15O1"
+      ],
+      "release_time": 0,
+      "due_date": 29,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J16O0",
+      "name": "作业 16 工序 0",
+      "duration": 5,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 28,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J16O1",
+      "name": "作业 16 工序 1",
+      "duration": 6,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J16O0"
+      ],
+      "release_time": 0,
+      "due_date": 29,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J16O2",
+      "name": "作业 16 工序 2",
+      "duration": 1,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J16O1"
+      ],
+      "release_time": 0,
+      "due_date": 30,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J17O0",
+      "name": "作业 17 工序 0",
+      "duration": 6,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 29,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J17O1",
+      "name": "作业 17 工序 1",
+      "duration": 1,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J17O0"
+      ],
+      "release_time": 0,
+      "due_date": 30,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J17O2",
+      "name": "作业 17 工序 2",
+      "duration": 2,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J17O1"
+      ],
+      "release_time": 0,
+      "due_date": 31,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J18O0",
+      "name": "作业 18 工序 0",
+      "duration": 1,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 30,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J18O1",
+      "name": "作业 18 工序 1",
+      "duration": 2,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J18O0"
+      ],
+      "release_time": 0,
+      "due_date": 31,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J18O2",
+      "name": "作业 18 工序 2",
+      "duration": 3,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J18O1"
+      ],
+      "release_time": 0,
+      "due_date": 32,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J19O0",
+      "name": "作业 19 工序 0",
+      "duration": 2,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 31,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J19O1",
+      "name": "作业 19 工序 1",
+      "duration": 3,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J19O0"
+      ],
+      "release_time": 0,
+      "due_date": 32,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J19O2",
+      "name": "作业 19 工序 2",
+      "duration": 4,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J19O1"
+      ],
+      "release_time": 0,
+      "due_date": 33,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J20O0",
+      "name": "作业 20 工序 0",
+      "duration": 3,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 32,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J20O1",
+      "name": "作业 20 工序 1",
+      "duration": 4,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J20O0"
+      ],
+      "release_time": 0,
+      "due_date": 33,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J20O2",
+      "name": "作业 20 工序 2",
+      "duration": 5,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J20O1"
+      ],
+      "release_time": 0,
+      "due_date": 34,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J21O0",
+      "name": "作业 21 工序 0",
+      "duration": 4,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 33,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J21O1",
+      "name": "作业 21 工序 1",
+      "duration": 5,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J21O0"
+      ],
+      "release_time": 0,
+      "due_date": 34,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J21O2",
+      "name": "作业 21 工序 2",
+      "duration": 6,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J21O1"
+      ],
+      "release_time": 0,
+      "due_date": 35,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J22O0",
+      "name": "作业 22 工序 0",
+      "duration": 5,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 34,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J22O1",
+      "name": "作业 22 工序 1",
+      "duration": 6,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J22O0"
+      ],
+      "release_time": 0,
+      "due_date": 35,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J22O2",
+      "name": "作业 22 工序 2",
+      "duration": 1,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J22O1"
+      ],
+      "release_time": 0,
+      "due_date": 36,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J23O0",
+      "name": "作业 23 工序 0",
+      "duration": 6,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 35,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J23O1",
+      "name": "作业 23 工序 1",
+      "duration": 1,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [
+        "J23O0"
+      ],
+      "release_time": 0,
+      "due_date": 36,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J23O2",
+      "name": "作业 23 工序 2",
+      "duration": 2,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J23O1"
+      ],
+      "release_time": 0,
+      "due_date": 37,
+      "weight": 3,
+      "priority": 1.0
+    },
+    {
+      "id": "J24O0",
+      "name": "作业 24 工序 0",
+      "duration": 1,
+      "resource_requirements": {
+        "M1": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 36,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J24O1",
+      "name": "作业 24 工序 1",
+      "duration": 2,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [
+        "J24O0"
+      ],
+      "release_time": 0,
+      "due_date": 37,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J24O2",
+      "name": "作业 24 工序 2",
+      "duration": 3,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J24O1"
+      ],
+      "release_time": 0,
+      "due_date": 38,
+      "weight": 1,
+      "priority": 1.0
+    },
+    {
+      "id": "J25O0",
+      "name": "作业 25 工序 0",
+      "duration": 2,
+      "resource_requirements": {
+        "M2": 1
+      },
+      "dependencies": [],
+      "release_time": 0,
+      "due_date": 37,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J25O1",
+      "name": "作业 25 工序 1",
+      "duration": 3,
+      "resource_requirements": {
+        "M3": 1
+      },
+      "dependencies": [
+        "J25O0"
+      ],
+      "release_time": 0,
+      "due_date": 38,
+      "weight": 2,
+      "priority": 1.0
+    },
+    {
+      "id": "J25O2",
+      "name": "作业 25 工序 2",
+      "duration": 4,
+      "resource_requirements": {
+        "M4": 1
+      },
+      "dependencies": [
+        "J25O1"
+      ],
+      "release_time": 0,
+      "due_date": 39,
+      "weight": 2,
+      "priority": 1.0
+    }
+  ],
+  "hard_constraints": [],
+  "soft_constraints": [],
+  "objective": {
+    "type": "makespan",
+    "weights": {},
+    "minimize": true,
+    "params": {}
+  },
+  "version": 1,
+  "created_at": "2026-10-05T14:04:06",
+  "updated_at": "2026-10-05T14:04:06"
+}

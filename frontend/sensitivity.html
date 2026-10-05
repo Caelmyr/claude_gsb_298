@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>敏感性分析 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>敏感性分析</h1>
+      <span class="sub">容量、工期、时间窗口与计划周期的单因素扰动</span>
+    </div>
+
+    <div class="card">
+      <div class="flex" style="flex-wrap:wrap">
+        <div style="min-width:180px"><label>参数</label>
+          <select id="kind">
+            <option value="resource_capacity">资源容量</option>
+            <option value="task_duration">任务工期</option>
+            <option value="release_time">最早开始时间</option>
+            <option value="due_date">截止日期</option>
+            <option value="horizon">计划周期</option>
+          </select></div>
+        <div style="min-width:180px" id="target-wrap"><label>目标（资源 / 任务）</label>
+          <select id="target"></select></div>
+        <div style="min-width:160px"><label>求解器</label>
+          <select id="solver"></select></div>
+        <div style="align-self:flex-end"><button class="btn primary" id="run-btn" onclick="run()">运行分析</button></div>
+      </div>
+    </div>
+
+    <div class="card" id="result-card" style="display:none">
+      <h2 id="result-title">敏感性分析结果</h2>
+      <div class="chart-wrap" id="tornado"></div>
+      <table class="mt"><thead><tr><th>变量取值</th><th class="num">目标值</th>
+        <th class="num">完工时间</th><th class="num">目标值变化</th><th>状态</th></tr></thead>
+        <tbody id="result-rows"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>已保存的分析</h2>
+      <table><thead><tr><th>ID</th><th>参数</th><th>求解器</th><th class="num">基准目标值</th><th>时间</th></tr></thead>
+        <tbody id="saved-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script src="js/charts.js"></script>
+<script>
+let problem = null;
+const solverSel = document.getElementById('solver');
+solverSel.innerHTML = SOLVER_NAMES.map(n => `<option ${n === 'greedy' ? 'selected' : ''}>${SOLVER_LABELS[n]}</option>`).join('');
+
+initSidebar('sensitivity.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  renderTargets();
+  loadSaved();
+}
+
+function renderTargets() {
+  const kind = document.getElementById('kind').value;
+  const wrap = document.getElementById('target-wrap');
+  const sel = document.getElementById('target');
+  let options = [];
+  if (['resource_capacity', 'resource_balance'].includes(kind)) options = problem.resources.map(r => r.id);
+  else if (['task_duration', 'release_time', 'due_date'].includes(kind)) options = problem.tasks.map(t => t.id);
+  if (options.length) {
+    wrap.style.display = '';
+    sel.innerHTML = options.map(o => `<option>${escapeHtml(o)}</option>`).join('');
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+async function run() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = '运行中…';
+  try {
+    const kind = document.getElementById('kind').value;
+    const spec = { kind };
+    if (['resource_capacity', 'resource_balance'].includes(kind)) spec.resource = document.getElementById('target').value;
+    if (['task_duration', 'release_time', 'due_date'].includes(kind)) spec.task = document.getElementById('target').value;
+    const result = await api(`/problems/${problem.id}/sensitivity`, {
+      method: 'POST', body: JSON.stringify({ solver: solverSel.value, spec }),
+    });
+    showResult(result);
+    loadSaved();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '运行分析';
+  }
+}
+
+function showResult(r) {
+  document.getElementById('result-card').style.display = 'block';
+  document.getElementById('result-title').textContent =
+    `敏感性分析 — ${r.parameter}（基准目标值 ${fmt(r.base_objective)}）`;
+  hBarChart(document.getElementById('tornado'), {
+    labels: r.variations.map(v => v.label),
+    values: r.variations.map(v => v.delta ?? 0),
+    valueFmt: v => (v > 0 ? '+' : '') + fmt(v),
+  });
+  document.getElementById('result-rows').innerHTML = r.variations.map(v => `
+    <tr><td>${escapeHtml(v.label)}</td>
+      <td class="num">${fmt(v.objective_value)}</td>
+      <td class="num">${fmt(v.makespan)}</td>
+      <td class="num">${v.delta > 0 ? '+' : ''}${fmt(v.delta)}</td>
+      <td>${statusBadge(v.status)}</td></tr>`).join('');
+}
+
+async function loadSaved() {
+  const { results } = await api(`/problems/${problem.id}/sensitivity`).catch(() => ({ results: [] }));
+  document.getElementById('saved-rows').innerHTML = results.map(r => `
+    <tr><td class="mono">${escapeHtml(r.id)}</td><td>${escapeHtml(r.parameter)}</td>
+      <td>${escapeHtml(SOLVER_LABELS[r.solver] || r.solver)}</td><td class="num">${fmt(r.base_objective)}</td>
+      <td class="small muted">${escapeHtml(r.created_at)}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="empty">暂无分析。</td></tr>';
+}
+
+document.getElementById('kind').addEventListener('change', renderTargets);
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>
