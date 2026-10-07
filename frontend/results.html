@@ -81,7 +81,12 @@ function renderTable() {
       <td class="num">${fmt(s.metrics?.total_tardiness)}</td>
       <td class="num">${fmt(s.metrics?.resource_cost)}</td>
       <td class="num">${fmt(s.solve_time)}</td>
-      <td><button class="btn sm" onclick="event.stopPropagation();loadDetail('${s.id}')">查看</button></td>
+      <td>
+        ${s.status === 'infeasible'
+          ? `<a class="btn sm danger" href="diagnosis.html?id=${encodeURIComponent(problem.id)}">诊断</a>`
+          : ''}
+        <button class="btn sm" onclick="event.stopPropagation();loadDetail('${s.id}')">查看</button>
+      </td>
     </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无求解结果。</td></tr>';
 }
 

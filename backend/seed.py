@@ -135,10 +135,44 @@ def _large() -> models.Problem:
     )
 
 
+def _infeasible() -> models.Problem:
+    """A deliberately infeasible instance: two fixed-start tasks overload one
+    machine inside a tight window, and a precedence chain cannot meet its
+    deadline.  Used to showcase the automatic diagnosis."""
+    p = models.Problem(
+        id="demo_infeasible",
+        name="不可行示例（诊断演示）",
+        description="固定开工的两个任务争抢一台容量为 1 的机器，且先后链晚于截止时间；用于演示不可行自动诊断。",
+        horizon=30,
+        time_unit="小时",
+        resources=[
+            models.Resource(id="M1", name="唯一机器", type="equipment", capacity=1),
+        ],
+        tasks=[
+            models.Task(id="T1", name="任务一", duration=6,
+                        resource_requirements={"M1": 1}),
+            models.Task(id="T2", name="任务二", duration=6,
+                        resource_requirements={"M1": 1}),
+            models.Task(id="T3", name="任务三", duration=8,
+                        resource_requirements={"M1": 1}, dependencies=["T2"]),
+        ],
+        hard_constraints=[
+            models.HardConstraint(id="fx1", type="fixed_start",
+                                  params={"task": "T1", "start": 4}),
+            models.HardConstraint(id="fx2", type="fixed_start",
+                                  params={"task": "T2", "start": 6}),
+            models.HardConstraint(id="win3", type="time_window",
+                                  params={"task": "T3", "deadline": 10}),
+        ],
+        objective=models.Objective(type="makespan"),
+    )
+    return p
+
+
 def seed_all(force: bool = False) -> List[str]:
     """Create the example instances if they do not already exist."""
     created: List[str] = []
-    for builder in (_jobshop, _staffing, _large):
+    for builder in (_jobshop, _staffing, _large, _infeasible):
         problem = builder()
         if not force and storage.load_problem(problem.id) is not None:
             continue

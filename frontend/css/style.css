@@ -254,3 +254,16 @@ td.mono { font-family: var(--mono); font-size: 12px; }
 .spacer { flex: 1; }
 .mt { margin-top: 12px; }
 .mb { margin-bottom: 12px; }
+
+/* ---- infeasibility diagnosis ---- */
+.conflict-card { border-left: 4px solid #f28e2b; }
+.participants { margin: 8px 0 0; padding-left: 18px; }
+.participants li { margin: 4px 0; line-height: 1.5; }
+.participants code, .fix-block code { background: var(--panel, #f4f6f9); padding: 1px 5px;
+  border-radius: 4px; font-family: var(--mono); font-size: 12px; }
+.row-good { background: rgba(89, 161, 79, .08); }
+.fix-block { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  margin: 10px 0; }
+.fix-ok { border-color: var(--ok); background: rgba(89, 161, 79, .06); }
+.steps { margin: 8px 0; padding-left: 20px; }
+.steps li { margin: 3px 0; }

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>不可行诊断 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>不可行自动诊断</h1>
+      <span class="sub">定位互相冲突的约束与任务，并给出可直接采用的放宽 / 删除建议</span>
+    </div>
+
+    <div class="card">
+      <div class="flex">
+        <div>
+          <h2 style="margin:0">对当前实例运行诊断</h2>
+          <div class="small muted" id="problem-meta">—</div>
+        </div>
+        <div class="spacer"></div>
+        <label class="small">时间预算(秒)
+          <input id="budget" type="number" min="0.5" step="0.5" value="5"
+                 style="width:80px;margin-left:6px"></label>
+        <button class="btn primary" id="run-btn" onclick="runDiagnosis()">开始诊断</button>
+      </div>
+      <div class="small muted mt">
+        诊断分三层：① 时间关系传播（秒级、精确）② 时间索引 LP 弹性定位＋删除滤波（证明冲突集极小）
+        ③ 多排序启发式（大实例兜底，明确标注非精确）。每条建议都会在修改后的副本上重新求解验证。
+      </div>
+    </div>
+
+    <div id="stale-banner" class="card" style="display:none;border-left:4px solid #e15759">
+      <b>⚠ 以下诊断已过期。</b>
+      <span id="stale-text"></span>
+      <button class="btn sm" style="margin-left:8px" onclick="runDiagnosis()">重新诊断</button>
+    </div>
+
+    <div id="result"></div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+let problem = null;
+let current = null;
+
+initSidebar('diagnosis.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  document.getElementById('problem-meta').textContent =
+    `${problem.name || problem.id} · v${problem.version} · ${problem.tasks.length} 个任务 · ${problem.resources.length} 个资源`;
+  // load the latest stored diagnosis automatically
+  const r = await api(`/problems/${problem.id}/diagnoses`);
+  if (r.diagnoses.length) {
+    const d = await api(`/problems/${problem.id}/diagnoses/${r.diagnoses[0].id}`);
+    renderDiagnosis(d.diagnosis, d.stale, d.created_at, d.problem_version);
+  } else {
+    document.getElementById('result').innerHTML =
+      '<div class="card empty">尚无诊断记录。点击「开始诊断」。</div>';
+  }
+}
+
+async function runDiagnosis() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = '诊断中…';
+  try {
+    const budget = parseFloat(document.getElementById('budget').value) || 5;
+    const d = await api(`/problems/${problem.id}/diagnose`, {
+      method: 'POST',
+      body: JSON.stringify({time_budget: budget}),
+    });
+    renderDiagnosis(d, false, null, problem.version);
+    if (d.feasible) toast('诊断完成：未发现不可行', 'ok');
+    else toast('诊断完成：发现 ' + d.conflicts.length + ' 组冲突', 'error');
+  } catch (e) {
+    toast('诊断失败：' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '开始诊断';
+  }
+}
+
+const METHOD_LABELS = {temporal: '时间关系（精确）', lp: 'LP 弹性定位（精确）',
+  heuristic: '启发式（未证明极小）', mixed: '混合（精确＋启发式）'};
+
+function renderDiagnosis(d, stale, createdAt, reportVersion) {
+  current = d;
+  const banner = document.getElementById('stale-banner');
+  if (stale) {
+    banner.style.display = 'block';
+    document.getElementById('stale-text').textContent =
+      `该诊断针对 v${reportVersion} 生成，当前问题已是 v${problem.version}（约束/任务/资源被修改过），结论可能不再适用。`;
+  } else {
+    banner.style.display = 'none';
+  }
+
+  const el = document.getElementById('result');
+  if (!d) { el.innerHTML = ''; return; }
+
+  if (d.feasible) {
+    el.innerHTML = `<div class="card"><h2>✅ ${escapeHtml(d.summary)}</h2>
+      <div class="small muted">方法：${METHOD_LABELS[d.method] || d.method} · 耗时 ${fmt(d.diagnose_time)}s</div></div>`;
+    return;
+  }
+
+  const conflicts = d.conflicts.map((c, i) => `
+    <div class="card conflict-card">
+      <div class="flex">
+        <h2 style="margin:0">冲突 ${i + 1}
+          <span class="badge ${c.minimal ? 'ok' : 'warn'}">${c.minimal ? '极小冲突集 IIS' : '未证明极小'}</span>
+          <span class="badge info">${METHOD_LABELS[c.method] || c.method}</span>
+        </h2>
+      </div>
+      <p class="mt">${escapeHtml(c.explanation)}</p>
+      <div class="small muted">涉及任务：${
+        (c.tasks || []).map(t => `<code>${escapeHtml(t)}</code>`).join(' ')}</div>
+      <h3 class="mt">卡死排程的 ${c.participants.length} 条限制（去掉任意一条即可化解本组）</h3>
+      <ul class="participants">
+        ${c.participants.map(p => `<li>${escapeHtml(p.label)}
+          <span class="small muted">[${kindLabel(p.kind)}]</span></li>`).join('')}
+      </ul>
+    </div>`).join('');
+
+  const single = (d.suggestions || []).map(s => `
+    <tr class="${s.sufficient ? 'row-good' : ''}">
+      <td><span class="badge ${s.resolves_conflict ? 'info' : ''}">冲突${s.resolves_conflict || '·'}</span></td>
+      <td>${actionLabel(s.action)}</td>
+      <td>${escapeHtml(s.label)}</td>
+      <td>${s.delta != null ? `${fmt(s.delta)} ${escapeHtml(s.unit || '')}` : '—'}</td>
+      <td>${s.sufficient
+          ? '<span class="badge ok">单步即可排</span>'
+          : '<span class="badge warn">仅解本组</span>'}</td>
+      <td class="small">${escapeHtml(s.verification)}</td>
+    </tr>`).join('');
+
+  const combined = (d.combined_fixes || []).map(f => `
+    <div class="fix-block ${f.verified ? 'fix-ok' : ''}">
+      <div class="flex"><b>${f.verified ? '✅ ' : '◻ '}${escapeHtml(f.name)}</b>
+        <span class="badge ${f.verified ? 'ok' : 'warn'}">${f.verified ? '已验证可排' : '未验证'}</span></div>
+      <ol class="steps">${f.steps.map(st => `<li>${escapeHtml(st.label)}${
+        st.suggested_value != null ? ` → <b>${fmt(st.suggested_value)}</b>` : ''}</li>`).join('')}</ol>
+      <div class="small muted">${escapeHtml(f.verification)}</div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="card" style="border-left:4px solid #e15759">
+      <h2 style="margin:0">❌ ${escapeHtml(d.summary || '判定为不可行')}</h2>
+      <div class="small muted mt">方法：${METHOD_LABELS[d.method] || d.method}
+        · 耗时 ${fmt(d.diagnose_time)}s${d.timed_out ? ' · <span style="color:#e15759">诊断超时，结论可能不完整</span>' : ''}
+        ${createdAt ? '· 生成于 ' + escapeHtml(createdAt) : ''}</div>
+      ${(d.unschedulable_tasks || []).length ? `
+        <div class="small mt"><b>始终放不下的任务：</b>${
+          d.unschedulable_tasks.map(t => `<code>${escapeHtml(t)}</code>`).join(' ')}</div>` : ''}
+    </div>
+    ${conflicts}
+    ${combined ? `<div class="card"><h2>一键修复方案（已按顺序验证）</h2>${combined}</div>` : ''}
+    <div class="card">
+      <h2>逐条修改建议</h2>
+      <table><thead><tr><th>对应</th><th>操作</th><th>建议</th><th class="num">变化量</th><th>充分性</th><th>验证</th></tr></thead>
+        <tbody>${single || '<tr><td colspan="6" class="empty">无</td></tr>'}</tbody></table>
+      <div class="small muted mt">「单步即可排」表示仅做这一处修改、对整个问题重新求解即可行；
+        「仅解本组」表示它化解对应冲突，但还存在其他独立冲突，需配合「一键修复方案」中的其余步骤。</div>
+    </div>`;
+}
+
+function kindLabel(k) {
+  return ({window_release:'时间窗下界', window_deadline:'截止时间', fixed_start:'固定开工',
+    precedence:'先后顺序', resource_capacity:'资源容量', max_concurrent:'并发上限',
+    non_overlap:'互斥', task_release:'释放时间', task_horizon:'规划期',
+    resource_availability:'可用日历', resource_assignment:'资源指派'})[k] || k;
+}
+function actionLabel(a) {
+  return ({relax:'<span class="badge ok">放宽</span>',
+    extend_horizon:'<span class="badge ok">延规划期</span>',
+    remove_constraint:'<span class="badge warn">删约束</span>',
+    remove_task:'<span class="badge bad">删任务</span>'})[a] || a;
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

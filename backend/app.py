@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from . import models, report, sensitivity, storage
+from . import models, report, sensitivity, storage, diagnosis
 from .solvers import base as solver_base
 
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -134,8 +134,34 @@ def create_app() -> Flask:
             solution = solver.solve(problem, params)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+        if solution.status == "infeasible" and data.get("diagnose", True):
+            _attach_diagnosis(problem, solution,
+                              time_budget=float(data.get("diagnose_time_budget", 5.0)))
         storage.save_solution(problem_id, solution)
         return jsonify(solution.to_dict()), 201
+
+    def _attach_diagnosis(problem, solution, *, time_budget: float) -> None:
+        """Run the diagnostic pipeline and persist its report, attaching the
+        payload (plus staleness data) directly to the solution."""
+        try:
+            result = diagnosis.diagnose(problem, time_budget=time_budget)
+        except Exception as exc:  # diagnosis must never break a solve request
+            solution.message = f"{solution.message}; 诊断失败: {exc}".strip("; ")
+            return
+        payload = result.to_dict()
+        report_obj = models.DiagnosisReport(
+            id=models.new_id("diag"),
+            problem_id=problem.id,
+            problem_version=problem.version,
+            fingerprint=result.fingerprint,
+            feasible=result.feasible,
+            diagnosis=payload,
+            solver=solution.solver,
+            solution_id=solution.id,
+        )
+        storage.save_diagnosis(problem.id, report_obj)
+        solution.diagnosis = payload
+        solution.diagnosis_id = report_obj.id
 
     @app.route("/api/problems/<problem_id>/solutions", methods=["GET"])
     def solutions(problem_id: str):
@@ -153,6 +179,59 @@ def create_app() -> Flask:
         if storage.delete_solution(problem_id, solution_id):
             return jsonify({"ok": True})
         return jsonify({"error": "not found"}), 404
+
+    # ------------------------------------------------------------------ #
+    # Infeasibility diagnosis
+    # ------------------------------------------------------------------ #
+    @app.route("/api/problems/<problem_id>/diagnose", methods=["POST"])
+    def diagnose_run(problem_id: str):
+        problem = storage.load_problem(problem_id)
+        if problem is None:
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json(force=True) or {}
+        try:
+            result = diagnosis.diagnose(
+                problem,
+                time_budget=float(data.get("time_budget", 5.0)))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        payload = result.to_dict()
+        if data.get("persist", True) and not result.feasible:
+            rep = models.DiagnosisReport(
+                id=models.new_id("diag"),
+                problem_id=problem_id,
+                problem_version=problem.version,
+                fingerprint=result.fingerprint,
+                feasible=False,
+                diagnosis=payload,
+                solver=data.get("solver", ""),
+            )
+            storage.save_diagnosis(problem_id, rep)
+            payload["id"] = rep.id
+        return jsonify(payload), 200 if result.feasible else 201
+
+    @app.route("/api/problems/<problem_id>/diagnoses", methods=["GET"])
+    def diagnoses(problem_id: str):
+        current = storage.load_problem(problem_id)
+        if current is None:
+            return jsonify({"error": "not found"}), 404
+        entries = storage.list_diagnoses(problem_id)
+        for e in entries:
+            e["stale"] = diagnosis.is_stale(
+                e.get("fingerprint", ""), e.get("problem_version", -1), current)
+        return jsonify({"diagnoses": entries,
+                        "current_version": current.version,
+                        "current_fingerprint": diagnosis.problem_fingerprint(current)})
+
+    @app.route("/api/problems/<problem_id>/diagnoses/<diagnosis_id>", methods=["GET"])
+    def diagnosis_get(problem_id: str, diagnosis_id: str):
+        current = storage.load_problem(problem_id)
+        rep = storage.load_diagnosis(problem_id, diagnosis_id)
+        if current is None or rep is None:
+            return jsonify({"error": "not found"}), 404
+        d = rep.to_dict()
+        d["stale"] = diagnosis.is_stale(rep.fingerprint, rep.problem_version, current)
+        return jsonify(d)
 
     # ------------------------------------------------------------------ #
     # Analysis

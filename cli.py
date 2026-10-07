@@ -16,7 +16,7 @@ import json
 import sys
 from typing import Any, Dict, List
 
-from backend import models, report, seed, sensitivity, storage
+from backend import models, report, seed, sensitivity, storage, diagnosis
 from backend.solvers import base as solver_base
 
 
@@ -111,6 +111,37 @@ def cmd_report(args) -> None:
     print(rep.content)
 
 
+def cmd_diagnose(args) -> None:
+    p = storage.load_problem(args.id)
+    if p is None:
+        print(f"no such problem: {args.id}")
+        sys.exit(1)
+    result = diagnosis.diagnose(p, time_budget=args.time_budget)
+    if args.json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return
+    print(f"feasible={result.feasible} method={result.method} "
+          f"conflicts={len(result.conflicts)} time={result.diagnose_time:.2f}s")
+    print(result.summary)
+    for i, cf in enumerate(result.conflicts, 1):
+        flag = "IIS 极小" if cf.minimal else "未证明极小"
+        print(f"\n[冲突 {i}] （{cf.method}，{flag}）{cf.explanation}")
+        for part in cf.participants:
+            print(f"   - {part.label}")
+        if cf.tasks:
+            print(f"   涉及任务: {', '.join(cf.tasks)}")
+    if result.suggestions:
+        print("\n修复建议:")
+        for s in result.suggestions:
+            mark = "✓" if s.sufficient else "·"
+            print(f"  {mark} [冲突{s.resolves_conflict}/{s.action}] "
+                  f"{s.label} —— {s.verification}")
+    for f in result.combined_fixes:
+        print(f"\n>>> {f['name']}（{f['verification']}）")
+        for st in f["steps"]:
+            print(f"    {st['label']}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="OR scheduling CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -150,6 +181,12 @@ def main() -> None:
     p_rep.add_argument("id")
     p_rep.add_argument("--solutions", nargs="*", default=[])
     p_rep.set_defaults(func=cmd_report)
+
+    p_diag = sub.add_parser("diagnose", help="diagnose infeasibility")
+    p_diag.add_argument("id")
+    p_diag.add_argument("--time-budget", type=float, default=5.0)
+    p_diag.add_argument("--json", action="store_true")
+    p_diag.set_defaults(func=cmd_diagnose)
 
     args = parser.parse_args()
     args.func(args)

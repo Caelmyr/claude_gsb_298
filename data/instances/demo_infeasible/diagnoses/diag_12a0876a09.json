@@ -1,0 +1,281 @@
+{
+  "id": "diag_12a0876a09",
+  "problem_id": "demo_infeasible",
+  "problem_version": 3,
+  "fingerprint": "baff12a441adeba8",
+  "feasible": false,
+  "diagnosis": {
+    "feasible": false,
+    "fingerprint": "baff12a441adeba8",
+    "problem_version": 3,
+    "method": "mixed",
+    "conflicts": [
+      {
+        "participants": [
+          {
+            "id": "edge:T2:T3",
+            "kind": "precedence",
+            "label": "先后顺序（依赖）：任务二（T2） 完成后才能开始 任务三（T3）",
+            "constraint_id": null,
+            "task_ids": [
+              "T2",
+              "T3"
+            ],
+            "resource_id": null
+          },
+          {
+            "id": "hc:win3:deadline",
+            "kind": "window_deadline",
+            "label": "时间窗 win3：任务三（T3） 不晚于 t=10 完成",
+            "constraint_id": "win3",
+            "task_ids": [
+              "T3"
+            ],
+            "resource_id": null
+          }
+        ],
+        "tasks": [
+          "T2",
+          "T3"
+        ],
+        "explanation": "任务 任务二（T2） 最早可开始于 t=6（最早完工 t=12），但要求最晚 t=4 完工，时间上不可能同时满足。",
+        "minimal": true,
+        "method": "temporal",
+        "witness": {
+          "tight_task": "T2",
+          "earliest_start": 6,
+          "latest_finish": 4
+        }
+      },
+      {
+        "participants": [
+          {
+            "id": "cap:M1",
+            "kind": "resource_capacity",
+            "label": "资源 唯一机器（M1） 的容量上限 1",
+            "constraint_id": null,
+            "task_ids": [
+              "T1",
+              "T2",
+              "T3"
+            ],
+            "resource_id": "M1"
+          },
+          {
+            "id": "hc:fx1",
+            "kind": "fixed_start",
+            "label": "固定开工 fx1：任务一（T1） 必须在 t=4 开始",
+            "constraint_id": "fx1",
+            "task_ids": [
+              "T1"
+            ],
+            "resource_id": null
+          },
+          {
+            "id": "hc:fx2",
+            "kind": "fixed_start",
+            "label": "固定开工 fx2：任务二（T2） 必须在 t=6 开始",
+            "constraint_id": "fx2",
+            "task_ids": [
+              "T2"
+            ],
+            "resource_id": null
+          }
+        ],
+        "tasks": [
+          "T1",
+          "T2",
+          "T3"
+        ],
+        "explanation": "时间限制（窗口/先后/固定开工）把 任务一（T1）、任务二（T2）、任务三（T3） 挤进了资源容量放不下的时段，容量与时间限制互相冲突。",
+        "minimal": true,
+        "method": "lp",
+        "witness": {
+          "participant_kinds": [
+            "fixed_start",
+            "resource_capacity"
+          ],
+          "elastic_hits": {
+            "hc:fx2": 0,
+            "hc:fx1": 0,
+            "cap:M1": 1
+          }
+        }
+      }
+    ],
+    "suggestions": [
+      {
+        "action": "relax",
+        "kind": "window_deadline",
+        "label": "把 时间窗 win3 的最晚完工时间从 10 后移到 ≥ 20",
+        "constraint_id": "win3",
+        "task_id": "T3",
+        "resource_id": null,
+        "current_value": 10,
+        "suggested_value": 20,
+        "delta": 10,
+        "unit": "时间单位",
+        "resolves_conflict": 1,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "给关键链留出足够的执行时间"
+      },
+      {
+        "action": "remove_constraint",
+        "kind": "precedence",
+        "label": "删除先后顺序：任务二（T2） 完成后才能开始 任务三（T3）",
+        "constraint_id": null,
+        "task_id": "T3",
+        "resource_id": null,
+        "current_value": null,
+        "suggested_value": null,
+        "delta": null,
+        "unit": "",
+        "resolves_conflict": 1,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "断开关键矛盾链中的一环"
+      },
+      {
+        "action": "remove_task",
+        "kind": "task",
+        "label": "从本次排程中移除任务 任务二（T2）",
+        "constraint_id": null,
+        "task_id": "T2",
+        "resource_id": null,
+        "current_value": null,
+        "suggested_value": null,
+        "delta": null,
+        "unit": "",
+        "resolves_conflict": 1,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "同时去掉该任务带来的容量占用与先后关系"
+      },
+      {
+        "action": "remove_task",
+        "kind": "task",
+        "label": "从本次排程中移除任务 任务三（T3）",
+        "constraint_id": null,
+        "task_id": "T3",
+        "resource_id": null,
+        "current_value": null,
+        "suggested_value": null,
+        "delta": null,
+        "unit": "",
+        "resolves_conflict": 1,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "同时去掉该任务带来的容量占用与先后关系"
+      },
+      {
+        "action": "relax",
+        "kind": "resource_capacity",
+        "label": "把 资源 唯一机器（M1） 的容量上限 1 从 1 提高到至少 2",
+        "constraint_id": null,
+        "task_id": null,
+        "resource_id": "M1",
+        "current_value": 1,
+        "suggested_value": 2.0,
+        "delta": 1.0,
+        "unit": "容量单位",
+        "resolves_conflict": 2,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "缓解最紧时段的资源争抢"
+      },
+      {
+        "action": "remove_constraint",
+        "kind": "fixed_start",
+        "label": "取消固定开工（任务一（T1） 必须在 t=4 开始），改由求解器在时间窗内自选开工点",
+        "constraint_id": "fx1",
+        "task_id": "T1",
+        "resource_id": null,
+        "current_value": null,
+        "suggested_value": null,
+        "delta": null,
+        "unit": "",
+        "resolves_conflict": 2,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "释放一个把资源钉死在某一时段的约束"
+      },
+      {
+        "action": "remove_constraint",
+        "kind": "fixed_start",
+        "label": "取消固定开工（任务二（T2） 必须在 t=6 开始），改由求解器在时间窗内自选开工点",
+        "constraint_id": "fx2",
+        "task_id": "T2",
+        "resource_id": null,
+        "current_value": null,
+        "suggested_value": null,
+        "delta": null,
+        "unit": "",
+        "resolves_conflict": 2,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "释放一个把资源钉死在某一时段的约束"
+      },
+      {
+        "action": "remove_task",
+        "kind": "task",
+        "label": "从本次排程中移除任务 任务一（T1）",
+        "constraint_id": null,
+        "task_id": "T1",
+        "resource_id": null,
+        "current_value": null,
+        "suggested_value": null,
+        "delta": null,
+        "unit": "",
+        "resolves_conflict": 2,
+        "sufficient": false,
+        "verified": false,
+        "verification": "应用后重新求解：infeasible（仍有其他冲突需要处理）",
+        "expected_effect": "同时去掉该任务带来的容量占用与先后关系"
+      }
+    ],
+    "combined_fixes": [
+      {
+        "name": "放宽优先组合",
+        "steps": [
+          {
+            "conflict": 1,
+            "action": "relax",
+            "label": "把 时间窗 win3 的最晚完工时间从 10 后移到 ≥ 20",
+            "constraint_id": "win3",
+            "task_id": "T3",
+            "resource_id": null,
+            "suggested_value": 20,
+            "unit": "时间单位"
+          },
+          {
+            "conflict": 2,
+            "action": "relax",
+            "label": "把 资源 唯一机器（M1） 的容量上限 1 从 1 提高到至少 2",
+            "constraint_id": null,
+            "task_id": null,
+            "resource_id": "M1",
+            "suggested_value": 2.0,
+            "unit": "容量单位"
+          }
+        ],
+        "verified": true,
+        "verification": "按 2 步全部修改后重新求解：optimal"
+      }
+    ],
+    "unschedulable_tasks": [],
+    "timed_out": false,
+    "diagnose_time": 0.187,
+    "summary": "判定为不可行（mixed），找到 2 组冲突。"
+  },
+  "solver": "greedy",
+  "solution_id": "sol_9cf8a5b89e",
+  "created_at": "2026-10-06T13:43:28"
+}

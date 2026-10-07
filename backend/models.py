@@ -330,6 +330,10 @@ class Solution:
     lower_bound: Optional[float] = None
     created_at: str = field(default_factory=now_iso)
     version: int = 1
+    # Present when an infeasible run triggered automatic diagnosis: the full
+    # diagnosis payload (conflicts/suggestions) plus the report id on disk.
+    diagnosis: Optional[Dict[str, Any]] = None
+    diagnosis_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -398,6 +402,38 @@ class Report:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Report":
+        return cls(**d)
+
+
+# --------------------------------------------------------------------------- #
+# Infeasibility diagnosis
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class DiagnosisReport:
+    """Result of an automatic infeasibility diagnosis.
+
+    Freshness is enforced with two keys: ``problem_version`` is bumped on every
+    saved edit, and ``fingerprint`` hashes every feasibility-relevant field.
+    A report whose keys no longer match the current problem is shown as stale
+    rather than trusted.  ``diagnosis`` is the full payload produced by
+    :mod:`diagnosis` (conflict sets, suggestions, unschedulable tasks, ...).
+    """
+    id: str
+    problem_id: str
+    problem_version: int
+    fingerprint: str
+    feasible: bool = False
+    diagnosis: Dict[str, Any] = field(default_factory=dict)
+    solver: str = ""                  # solver whose infeasible run triggered it
+    solution_id: Optional[str] = None
+    created_at: str = field(default_factory=now_iso)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "DiagnosisReport":
         return cls(**d)
 
 

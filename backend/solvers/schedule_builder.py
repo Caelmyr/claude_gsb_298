@@ -25,12 +25,26 @@ from typing import Dict, List, Optional, Tuple
 from .. import models
 
 
+def _fixed_start(problem: models.Problem, task_id: str) -> Optional[int]:
+    for c in problem.hard_constraints:
+        if c.type == "fixed_start" and c.params.get("task") == task_id:
+            s = c.params.get("start")
+            if s is not None:
+                return s
+    return None
+
+
 def topological_order(problem: models.Problem,
                       priorities: Optional[Dict[str, float]] = None) -> List[str]:
     """Return a precedence-feasible task order.  When ``priorities`` is given the
     available task with the *highest* priority is chosen first (random-key style
     decoding); otherwise tasks are ordered by the problem's own priority field,
-    then by a stable heuristic (most successors / shortest duration)."""
+    then by a stable heuristic (most successors / shortest duration).
+
+    Fixed-start tasks are always taken before non-fixed available tasks so
+    that their immovable slots are reserved first; among fixed tasks the
+    earliest fixed start wins.  Without this a freely-placed task could grab a
+    fixed task's slot and make the fixed task spuriously unschedulable."""
     tasks = problem.task_map()
     succ = problem.successors()
     edges = problem.precedence_edges()
@@ -38,6 +52,7 @@ def topological_order(problem: models.Problem,
     for b, a in edges:
         if b in indeg and a in indeg:
             indeg[a] += 1
+    fixed = {tid: _fixed_start(problem, tid) for tid in tasks}
 
     order: List[str] = []
     while len(order) < len(tasks):
@@ -46,13 +61,18 @@ def topological_order(problem: models.Problem,
             # cycle: fall back to any unscheduled task
             available = [t for t in tasks if t not in order]
 
-        def key(t: str) -> Tuple[float, float, float, int, str]:
+        def key(t: str) -> Tuple[int, int, float, float, float, int, str]:
+            fs = fixed.get(t)
+            is_fixed = 0 if fs is not None else 1
             if priorities is not None:
                 p = priorities.get(t, 0.0)
             else:
                 p = tasks[t].priority
-            # primary: priority (higher first -> negate)
+            # ordering: fixed-first (earliest), then priority (higher first),
+            # then most successors / earliest release / shorter duration
             return (
+                is_fixed,
+                fs if fs is not None else 0,
                 -p,
                 -len(succ.get(t, [])),
                 tasks[t].release_time,
@@ -94,6 +114,7 @@ def _feasible_start(problem: models.Problem, task_id: str,
                 earliest = max(earliest, starts[before] + problem.task_map()[before].duration)
 
     # time_window / fixed_start hard constraints
+    fixed_s: Optional[int] = None
     for c in problem.hard_constraints:
         p = c.params
         if p.get("task") != task_id:
@@ -104,9 +125,21 @@ def _feasible_start(problem: models.Problem, task_id: str,
         elif c.type == "fixed_start":
             s = p.get("start")
             if s is not None:
-                return s if s >= earliest and s + d <= problem.horizon else None
+                fixed_s = s
 
     horizon = problem.horizon
+    if fixed_s is not None:
+        # A fixed start is still subject to precedence/release, to the horizon
+        # and to every capacity / non-overlap / availability restriction --
+        # returning it unchecked would let two fixed tasks collide on a
+        # resource and silently produce an infeasible schedule.
+        if fixed_s < earliest or fixed_s + d > horizon:
+            return None
+        if not _window_deadline_ok(problem, task_id, fixed_s):
+            return None
+        if _window_ok(problem, task, fixed_s, starts, rmap):
+            return fixed_s
+        return None
     for t in range(earliest, horizon - d + 1):
         if _window_ok(problem, task, t, starts, rmap):
             # fixed window deadline check

@@ -73,6 +73,7 @@ def _subdirs(problem_id: str) -> List[str]:
         os.path.join(base, "configs"),
         os.path.join(base, "reports"),
         os.path.join(base, "sensitivity"),
+        os.path.join(base, "diagnoses"),
     ]
 
 
@@ -413,3 +414,61 @@ def load_report(problem_id: str, report_id: str) -> Optional[models.Report]:
     if not os.path.isfile(path):
         return None
     return models.Report.from_dict(_read_json(path))
+
+
+# --------------------------------------------------------------------------- #
+# Diagnosis reports
+# --------------------------------------------------------------------------- #
+
+def save_diagnosis(problem_id: str,
+                   report: models.DiagnosisReport) -> models.DiagnosisReport:
+    ensure_instance_dirs(problem_id)
+    with problem_lock(problem_id):
+        path = os.path.join(instance_dir(problem_id), "diagnoses",
+                            f"{report.id}.json")
+        atomic_write_json(path, report.to_dict())
+    return report
+
+
+def list_diagnoses(problem_id: str) -> List[Dict[str, Any]]:
+    ddir = os.path.join(instance_dir(problem_id), "diagnoses")
+    if not os.path.isdir(ddir):
+        return []
+    out = []
+    for name in sorted(os.listdir(ddir)):
+        if not name.endswith(".json"):
+            continue
+        try:
+            d = _read_json(os.path.join(ddir, name))
+        except (OSError, json.JSONDecodeError):
+            continue
+        out.append({
+            "id": d.get("id"),
+            "problem_version": d.get("problem_version"),
+            "fingerprint": d.get("fingerprint"),
+            "feasible": d.get("feasible"),
+            "solver": d.get("solver"),
+            "solution_id": d.get("solution_id"),
+            "created_at": d.get("created_at"),
+            "method": (d.get("diagnosis") or {}).get("method"),
+            "n_conflicts": len((d.get("diagnosis") or {}).get("conflicts", [])),
+        })
+    return sorted(out, key=lambda r: r.get("created_at", ""), reverse=True)
+
+
+def load_diagnosis(problem_id: str,
+                   diagnosis_id: str) -> Optional[models.DiagnosisReport]:
+    if not is_safe_id(diagnosis_id):
+        return None
+    path = os.path.join(instance_dir(problem_id), "diagnoses",
+                        f"{diagnosis_id}.json")
+    if not os.path.isfile(path):
+        return None
+    return models.DiagnosisReport.from_dict(_read_json(path))
+
+
+def latest_diagnosis(problem_id: str) -> Optional[models.DiagnosisReport]:
+    entries = list_diagnoses(problem_id)
+    if not entries:
+        return None
+    return load_diagnosis(problem_id, entries[0]["id"])
