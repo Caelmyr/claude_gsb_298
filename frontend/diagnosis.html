@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>不可行诊断 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>不可行诊断</h1>
+      <span class="sub">自动找出互相冲突的最小约束集合，并给出经过验证的放宽建议</span>
+    </div>
+
+    <div class="card">
+      <div class="flex" style="flex-wrap:wrap;align-items:flex-end">
+        <div style="min-width:180px"><label>诊断时间预算（秒）</label>
+          <input id="budget" type="number" min="1" max="60" value="10" step="1"></div>
+        <div><button class="btn primary" id="run-btn" onclick="runDiagnosis()">开始诊断</button></div>
+        <div class="muted small" style="align-self:center">
+          结构检查（空时间窗、先后链冲突、容量挤压、日历冲突）即时完成；
+          LP 冲突核提取与建议复测在预算内运行。
+        </div>
+      </div>
+      <div id="stale-banner" class="badge warn" style="display:none;margin-top:12px"></div>
+    </div>
+
+    <div id="summary-card" class="card" style="display:none"></div>
+    <div id="cores"></div>
+
+    <div class="card">
+      <h2>历史诊断</h2>
+      <table><thead><tr><th>ID</th><th>结论</th><th class="num">冲突组</th>
+        <th>版本</th><th>有效性</th><th class="num">耗时</th><th>时间</th></tr></thead>
+        <tbody id="saved-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script>
+let problem = null;
+
+initSidebar('diagnosis.html');
+
+async function init() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  loadLatest();
+  loadSaved();
+}
+
+function memberBadge(m) {
+  const map = {
+    task: ['任务', 'info'],
+    hard_constraint: ['硬约束', 'bad'],
+    resource: ['资源', 'warn'],
+    horizon: ['计划周期', 'muted'],
+  };
+  const [label, cls] = map[m.kind] || [m.kind, 'muted'];
+  return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
+}
+
+function suggestionTag(s) {
+  if (s.status === 'verified')
+    return '<span class="badge ok">✓ 已验证可行</span>';
+  if (s.status === 'resolves_core')
+    return '<span class="badge info">解除本组</span>';
+  if (s.status === 'predicted')
+    return '<span class="badge warn">推测可用</span>';
+  return `<span class="badge muted">${escapeHtml(s.status)}</span>`;
+}
+
+function actionIcon(a) {
+  return { delete_constraint: '🗑', relax_time_window: '🕒',
+    relax_capacity: '⬆', delete_task: '✂', extend_horizon: '⤢' }[a] || '•';
+}
+
+function renderCores(cores) {
+  const host = document.getElementById('cores');
+  if (!cores || !cores.length) { host.innerHTML = ''; return; }
+  host.innerHTML = cores.map((c, i) => `
+    <div class="card core-card">
+      <h2>冲突组 #${i + 1}
+        <span class="badge ${c.source === 'structural' ? 'info' : 'warn'}">
+          ${c.source === 'structural' ? '结构证明' : 'LP 最小冲突核'}</span>
+      </h2>
+      <p class="explain">${escapeHtml(c.explanation)}</p>
+      <div class="members">
+        ${c.members.map(m => `
+          <div class="member">${memberBadge(m)}
+            <span class="member-label">${escapeHtml(m.detail || m.label)}</span>
+          </div>`).join('')}
+      </div>
+      <h3>可执行建议（去掉/放宽以下任一项可解除本组卡死）</h3>
+      ${c.suggestions.length ? `<table class="sug-table">
+        <tbody>${c.suggestions.map(s => `
+          <tr><td class="sug-icon">${actionIcon(s.action)}</td>
+            <td><div class="sug-label">${escapeHtml(s.label)}</div>
+              <div class="small muted">${escapeHtml(s.description)}</div></td>
+            <td class="sug-tag">${suggestionTag(s)}</td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted small">无已验证建议，可按上述成员对象逐条尝试。</p>'}
+    </div>`).join('');
+}
+
+function renderSummary(d) {
+  const card = document.getElementById('summary-card');
+  card.style.display = 'block';
+  const statusMap = {
+    infeasible: ['不可行', 'bad'],
+    feasible: ['可行', 'ok'],
+    relaxation_feasible: ['松弛可行·整数未证实', 'warn'],
+  };
+  const [slabel, scls] = statusMap[d.status] || [d.status, 'muted'];
+  const methodMap = { structural: '结构检查', elastic_lp: '弹性LP核提取', mixed: '结构+LP' };
+  card.innerHTML = `
+    <div class="flex" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">诊断结论 <span class="badge ${scls}">${slabel}</span>
+        <span class="badge muted">${escapeHtml(methodMap[d.method] || d.method)}</span>
+      </h2>
+      <span class="small muted mono">${escapeHtml(d.id)} · v${d.problem_version}
+        · 指纹 ${escapeHtml(d.fingerprint)}</span>
+    </div>
+    <p style="margin:10px 0 0">${escapeHtml(d.summary)}</p>
+    ${(d.warnings || []).length ? `<ul class="small warn-list">
+      ${d.warnings.map(w => `<li>⚠ ${escapeHtml(w)}</li>`).join('')}</ul>` : ''}`;
+}
+
+async function runDiagnosis() {
+  const btn = document.getElementById('run-btn');
+  const budget = Math.max(1, Math.min(60, Number(document.getElementById('budget').value) || 10));
+  btn.disabled = true; btn.textContent = '诊断中…';
+  document.getElementById('stale-banner').style.display = 'none';
+  try {
+    const d = await api(`/problems/${problem.id}/diagnose`, {
+      method: 'POST', body: JSON.stringify({ time_budget: budget }),
+    });
+    renderSummary(d);
+    renderCores(d.cores);
+    loadSaved();
+    toast('诊断完成');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '开始诊断';
+  }
+}
+
+async function loadLatest() {
+  try {
+    const d = await api(`/problems/${problem.id}/diagnoses/latest?include_stale=1`);
+    renderSummary(d);
+    renderCores(d.cores || []);
+    const banner = document.getElementById('stale-banner');
+    if (d.stale) {
+      banner.style.display = 'inline-block';
+      banner.textContent = '⚠ 该诊断基于旧版本问题内容（约束/任务已被修改），结论可能已失效，请重新诊断。';
+    }
+  } catch (_) { /* no diagnosis yet */ }
+}
+
+async function loadSaved() {
+  const { diagnoses } = await api(`/problems/${problem.id}/diagnoses`)
+    .catch(() => ({ diagnoses: [] }));
+  const tbody = document.getElementById('saved-rows');
+  if (!diagnoses.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无诊断记录。</td></tr>';
+    return;
+  }
+  tbody.innerHTML = diagnoses.map(d => `
+    <tr class="${d.stale ? 'row-stale' : ''}">
+      <td class="mono"><a href="#" onclick="openDiag('${d.id}');return false">${escapeHtml(d.id)}</a></td>
+      <td>${escapeHtml(d.status)}</td>
+      <td class="num">${d.n_cores}</td>
+      <td class="num">v${d.problem_version}</td>
+      <td>${d.stale ? '<span class="badge warn">已过期</span>' : '<span class="badge ok">当前有效</span>'}</td>
+      <td class="num">${fmt(d.elapsed)}s</td>
+      <td class="small muted">${escapeHtml(d.created_at)}</td></tr>`).join('');
+}
+
+async function openDiag(id) {
+  try {
+    const d = await api(`/problems/${problem.id}/diagnoses/${id}`);
+    renderSummary(d);
+    renderCores(d.cores || []);
+    const banner = document.getElementById('stale-banner');
+    if (d.stale) {
+      banner.style.display = 'inline-block';
+      banner.textContent = '⚠ 该诊断基于旧版本问题内容（约束/任务已被修改），结论可能已失效，请重新诊断。';
+    } else {
+      banner.style.display = 'none';
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+init().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

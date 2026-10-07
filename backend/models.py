@@ -242,11 +242,21 @@ class Problem:
     updated_at: str = field(default_factory=now_iso)
 
     # -- convenience index helpers ---------------------------------------- #
-    def resource_map(self) -> Dict[str, Resource]:
-        return {r.id: r for r in self.resources}
+    def resource_map(self) -> Dict[str, "Resource"]:
+        cache = getattr(self, "_idx_cache", None)
+        if cache is None:
+            cache = self._idx_cache = {}
+        if "resources" not in cache:
+            cache["resources"] = {r.id: r for r in self.resources}
+        return cache["resources"]
 
-    def task_map(self) -> Dict[str, Task]:
-        return {t.id: t for t in self.tasks}
+    def task_map(self) -> Dict[str, "Task"]:
+        cache = getattr(self, "_idx_cache", None)
+        if cache is None:
+            cache = self._idx_cache = {}
+        if "tasks" not in cache:
+            cache["tasks"] = {t.id: t for t in self.tasks}
+        return cache["tasks"]
 
     def precedence_edges(self) -> List[Tuple[str, str]]:
         """Return explicit (before, after) edges from task.dependencies plus

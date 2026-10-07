@@ -16,7 +16,7 @@ import json
 import sys
 from typing import Any, Dict, List
 
-from backend import models, report, seed, sensitivity, storage
+from backend import models, report, seed, sensitivity, storage, diagnosis
 from backend.solvers import base as solver_base
 
 
@@ -100,6 +100,29 @@ def cmd_sensitivity(args) -> None:
               f"delta={v['delta']} status={v['status']}")
 
 
+def cmd_diagnose(args) -> None:
+    p = storage.load_problem(args.id)
+    if p is None:
+        print(f"no such problem: {args.id}")
+        sys.exit(1)
+    diag = diagnosis.diagnose(p, time_budget=args.time_budget, persist=True)
+    print(f"诊断 {diag.id}（v{diag.problem_version}，指纹 {diag.fingerprint}，"
+          f"方法 {diag.method}，耗时 {diag.elapsed:.2f}s）")
+    print(f"结论：{diag.status} — {diag.summary}")
+    for w in diag.warnings:
+        print(f"  ⚠ {w}")
+    for i, core in enumerate(diag.cores, 1):
+        print(f"\n冲突组 #{i}（来源 {core.source}）：{core.explanation}")
+        for m in core.members:
+            print(f"  · [{m.kind}] {m.detail or m.label}")
+        for s in core.suggestions:
+            mark = {"verified": "✓ 已验证", "failed": "✗ 不解决问题",
+                    "predicted": "? 未验证"}.get(s.status, s.status)
+            print(f"    建议[{mark}] {s.label} — {s.description}")
+    if args.json:
+        print(json.dumps(diag.to_dict(), ensure_ascii=False, indent=2))
+
+
 def cmd_report(args) -> None:
     p = storage.load_problem(args.id)
     if p is None:
@@ -145,6 +168,12 @@ def main() -> None:
     p_sens.add_argument("--task")
     p_sens.add_argument("--solver", default="greedy")
     p_sens.set_defaults(func=cmd_sensitivity)
+
+    p_diag = sub.add_parser("diagnose", help="诊断不可行原因")
+    p_diag.add_argument("id")
+    p_diag.add_argument("--time-budget", type=float, default=10.0)
+    p_diag.add_argument("--json", action="store_true")
+    p_diag.set_defaults(func=cmd_diagnose)
 
     p_rep = sub.add_parser("report")
     p_rep.add_argument("id")

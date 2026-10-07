@@ -36,6 +36,7 @@
 
     <div class="card" id="detail-card" style="display:none">
       <h2 id="detail-title">方案详情</h2>
+      <div id="detail-diag" class="mt" style="display:none"></div>
       <div class="grid cols-4" id="detail-stats"></div>
       <div class="grid cols-2 mt">
         <div><h3>目标构成</h3><div class="chart-wrap" id="comp-chart"></div></div>
@@ -108,6 +109,21 @@ async function loadDetail(id) {
   ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
 
   const m = s.metrics || {};
+  const diagEl = document.getElementById('detail-diag');
+  if (s.status === 'infeasible' && (m.diagnosis_id || m.diagnosis_note || m.diagnosis_error)) {
+    const qs = currentProblemId() ? '?id=' + encodeURIComponent(currentProblemId()) : '';
+    const note = m.diagnosis_error
+      ? `自动诊断失败：${escapeHtml(m.diagnosis_error)}`
+      : escapeHtml(m.diagnosis_note || '已生成不可行诊断：查看互相冲突的最小约束集合与放宽建议。');
+    diagEl.style.display = 'block';
+    diagEl.innerHTML = `<div class="badge bad">不可行</div>
+      <span style="margin-left:8px">${note}</span>
+      ${m.diagnosis_id ? `<a class="btn sm" style="margin-left:8px"
+         href="diagnosis.html${qs}">查看冲突诊断 →</a>` : ''}`;
+  } else {
+    diagEl.style.display = 'none';
+    diagEl.innerHTML = '';
+  }
   barChart(document.getElementById('comp-chart'), {
     labels: ['完工时间', '加权\n完工时间', '拖期', '成本', '软约束\n惩罚'],
     values: [m.makespan || 0, m.weighted_completion || 0, m.total_tardiness || 0,

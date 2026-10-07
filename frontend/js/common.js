@@ -130,6 +130,7 @@ const NAV = [
   ['solvers.html', '求解器与参数'],
   ['gantt.html', '甘特图'],
   ['results.html', '结果与目标值'],
+  ['diagnosis.html', '不可行诊断'],
   ['sensitivity.html', '敏感性分析'],
   ['compare.html', '方案对比'],
   ['report.html', '报告生成'],

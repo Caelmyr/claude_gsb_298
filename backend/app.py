@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from . import models, report, sensitivity, storage
+from . import models, report, sensitivity, storage, diagnosis
 from .solvers import base as solver_base
 
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -135,6 +135,27 @@ def create_app() -> Flask:
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         storage.save_solution(problem_id, solution)
+        # An infeasible verdict is useless without the reason: attach the id
+        # of a fresh diagnosis (computed synchronously, within a time budget).
+        if solution.status == "infeasible":
+            try:
+                diag = diagnosis.diagnose(problem, persist=True)
+                solution.metrics["diagnosis_id"] = diag.id
+                solution.metrics["diagnosis_status"] = diag.status
+                if diag.status == "infeasible":
+                    solution.message = diag.summary or solution.message
+                elif diag.status == "feasible":
+                    # The exact feasibility model plus a concrete witness find
+                    # a schedule the heuristic solver missed: keep the verdict
+                    # but make clear the data is not truly contradictory.
+                    solution.metrics["diagnosis_note"] = (
+                        "求解器未能构造出完整排程，但可行性诊断确认问题可行"
+                        "（已构造出具体排程）；可换用其它求解器重试。")
+                else:
+                    solution.metrics["diagnosis_note"] = diag.summary
+                storage.save_solution(problem_id, solution)
+            except Exception as exc:  # diagnosis must never break solving
+                solution.metrics["diagnosis_error"] = str(exc)
         return jsonify(solution.to_dict()), 201
 
     @app.route("/api/problems/<problem_id>/solutions", methods=["GET"])
@@ -231,6 +252,46 @@ def create_app() -> Flask:
         if rep is None:
             return jsonify({"error": "not found"}), 404
         return jsonify(rep.to_dict())
+
+    # ------------------------------------------------------------------ #
+    # Infeasibility diagnosis
+    # ------------------------------------------------------------------ #
+    @app.route("/api/problems/<problem_id>/diagnose", methods=["POST"])
+    def diagnose_run(problem_id: str):
+        problem = storage.load_problem(problem_id)
+        if problem is None:
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            time_budget = float(data.get("time_budget",
+                                         diagnosis.DEFAULT_TIME_BUDGET))
+            diag = diagnosis.diagnose(problem,
+                                      time_budget=min(time_budget, 60.0),
+                                      persist=True)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify(diag.to_dict()), 201
+
+    @app.route("/api/problems/<problem_id>/diagnoses", methods=["GET"])
+    def diagnose_list(problem_id: str):
+        return jsonify({"diagnoses": storage.list_diagnoses(problem_id)})
+
+    @app.route("/api/problems/<problem_id>/diagnoses/latest", methods=["GET"])
+    def diagnose_latest(problem_id: str):
+        include_stale = request.args.get("include_stale") in ("1", "true")
+        diag = storage.latest_diagnosis(problem_id,
+                                        include_stale=include_stale)
+        if diag is None:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(diag.to_dict())
+
+    @app.route("/api/problems/<problem_id>/diagnoses/<diagnosis_id>",
+               methods=["GET"])
+    def diagnose_get(problem_id: str, diagnosis_id: str):
+        diag = storage.load_diagnosis(problem_id, diagnosis_id)
+        if diag is None:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(diag.to_dict())
 
     # ------------------------------------------------------------------ #
     # Configs

@@ -73,6 +73,7 @@ def _subdirs(problem_id: str) -> List[str]:
         os.path.join(base, "configs"),
         os.path.join(base, "reports"),
         os.path.join(base, "sensitivity"),
+        os.path.join(base, "diagnoses"),
     ]
 
 
@@ -413,3 +414,105 @@ def load_report(problem_id: str, report_id: str) -> Optional[models.Report]:
     if not os.path.isfile(path):
         return None
     return models.Report.from_dict(_read_json(path))
+
+
+# --------------------------------------------------------------------------- #
+# Diagnoses
+# --------------------------------------------------------------------------- #
+# A diagnosis explains one specific problem *content*.  It is stored under the
+# problem version it was computed for and carries a fingerprint; on read it is
+# flagged ``stale`` whenever the current problem content has changed, so an old
+# "the conflict is X / drop Y" conclusion can never masquerade as current.
+
+def save_diagnosis(problem_id: str, diagnosis) -> Any:
+    ensure_instance_dirs(problem_id)
+    with problem_lock(problem_id):
+        path = os.path.join(instance_dir(problem_id), "diagnoses",
+                            f"{diagnosis.id}.json")
+        atomic_write_json(path, diagnosis.to_dict())
+    return diagnosis
+
+
+def list_diagnoses(problem_id: str) -> List[Dict[str, Any]]:
+    ddir = os.path.join(instance_dir(problem_id), "diagnoses")
+    if not os.path.isdir(ddir):
+        return []
+    current = _current_fingerprint(problem_id)
+    current_version = _current_version(problem_id)
+    out = []
+    for name in sorted(os.listdir(ddir)):
+        if not name.endswith(".json"):
+            continue
+        try:
+            d = _read_json(os.path.join(ddir, name))
+        except (OSError, json.JSONDecodeError):
+            continue
+        # Stale iff the feasibility-relevant *content* changed.  A version
+        # bump alone (e.g. objective-only edits, which the fingerprint
+        # excludes) must not invalidate the diagnosis.
+        stale = bool(current and d.get("fingerprint") != current)
+        out.append({
+            "id": d.get("id"),
+            "status": d.get("status"),
+            "summary": d.get("summary", ""),
+            "fingerprint": d.get("fingerprint", ""),
+            "problem_version": d.get("problem_version", 1),
+            "stale": stale,
+            "method": d.get("method", ""),
+            "elapsed": d.get("elapsed", 0.0),
+            "n_cores": len(d.get("cores", [])),
+            "created_at": d.get("created_at", ""),
+        })
+    return sorted(out, key=lambda d: d.get("created_at", ""), reverse=True)
+
+
+def load_diagnosis(problem_id: str, diagnosis_id: str):
+    if not is_safe_id(diagnosis_id):
+        return None
+    path = os.path.join(instance_dir(problem_id), "diagnoses",
+                        f"{diagnosis_id}.json")
+    if not os.path.isfile(path):
+        return None
+    from .diagnosis import Diagnosis
+    diag = Diagnosis.from_dict(_read_json(path))
+    current = _current_fingerprint(problem_id)
+    current_version = _current_version(problem_id)
+    if current and diag.fingerprint != current:
+        diag.stale = True
+    return diag
+
+
+def latest_diagnosis(problem_id: str, *, include_stale: bool = False):
+    """Most recent diagnosis for the *current* problem content.
+
+    Stale diagnoses are hidden by default so callers cannot accidentally show
+    an outdated conclusion; pass ``include_stale=True`` for the history view.
+    """
+    entries = list_diagnoses(problem_id)
+    for meta in entries:
+        if include_stale or not meta["stale"]:
+            return load_diagnosis(problem_id, meta["id"])
+    return None
+
+
+def _current_fingerprint(problem_id: str) -> Optional[str]:
+    path = problem_path(problem_id)
+    if not os.path.isfile(path):
+        return None
+    try:
+        d = _read_json(path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    from .diagnosis import fingerprint
+    from .models import Problem
+    return fingerprint(Problem.from_dict(d))
+
+
+def _current_version(problem_id: str) -> Optional[int]:
+    path = problem_path(problem_id)
+    if not os.path.isfile(path):
+        return None
+    try:
+        return int(_read_json(path).get("version", 1))
+    except (OSError, json.JSONDecodeError):
+        return None

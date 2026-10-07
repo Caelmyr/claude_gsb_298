@@ -254,3 +254,18 @@ td.mono { font-family: var(--mono); font-size: 12px; }
 .spacer { flex: 1; }
 .mt { margin-top: 12px; }
 .mb { margin-bottom: 12px; }
+
+/* ---- infeasibility diagnosis ----------------------------------------- */
+.core-card { border-left: 3px solid var(--bad); }
+.core-card .explain { margin: 8px 0 12px; line-height: 1.6; }
+.members { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.member { display: flex; gap: 8px; align-items: center; }
+.member-label { font-size: 13px; }
+.sug-table { width: 100%; border-collapse: collapse; }
+.sug-table td { padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+.sug-icon { width: 26px; font-size: 15px; }
+.sug-tag { width: 120px; text-align: right; white-space: nowrap; }
+.sug-label { font-weight: 600; font-size: 13px; }
+.warn-list { margin: 8px 0 0; padding-left: 18px; color: #92400e; }
+tr.row-stale { opacity: .55; }
+tr.row-stale td:first-child a { color: var(--muted); }
